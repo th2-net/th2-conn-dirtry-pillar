@@ -15,26 +15,16 @@
  */
 
 plugins {
-    id 'com.palantir.docker' version '0.25.0'
+    id 'com.palantir.docker' version '0.31.0'
     id 'com.github.harbby.gradle.serviceloader' version '1.1.8'
     id 'org.jetbrains.kotlin.jvm' version '1.6.0'
     id 'application'
 }
 
-ext {
-    sharedDir = file("${project.rootDir}/shared")
-    sailfishVersion = '3.2.1594'
-}
-
-group 'org.example'
-version '1.0-SNAPSHOT'
+group 'com.exactpro.th2'
+version release_version
 
 repositories {
-    maven {
-        name 'MavenLocal'
-        url sharedDir
-    }
-
     mavenCentral()
     maven {
         name 'Sonatype_snapshots'
@@ -52,20 +42,24 @@ repositories {
         resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
         resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
     }
-
-    maven {
-        url "https://plugins.gradle.org/m2/"
-    }
 }
 
 dependencies {
-    implementation 'com.exactpro.th2:sailfish-utils:3.12.2'
-    implementation 'com.exactpro.th2:conn-dirty-tcp-core:0.0.1-th2-2785-1601754947-SNAPSHOT'
+    api platform('com.exactpro.th2:bom:3.0.0')
+
+    implementation 'com.exactpro.th2:common:3.31.4'
+    implementation 'com.exactpro.th2:conn-dirty-tcp-core:0.0.1-th2-2785-1615274464-SNAPSHOT'
+
+    implementation 'io.netty:netty-all:4.1.72.Final'
+
+    implementation 'io.github.microutils:kotlin-logging:2.1.16'
+
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.6.0'
+
+    testImplementation "com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0"
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
-    testImplementation "com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0"
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.6.0'
 }
 
 application {
@@ -102,5 +96,5 @@ compileTestKotlin {
 }
 
 serviceLoader {
-    serviceInterface 'com.exactpro.th2.conn.dirty.tcp.core.api.IFactory'
+    serviceInterface 'com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerFactory'
 }

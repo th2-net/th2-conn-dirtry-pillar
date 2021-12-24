@@ -16,13 +16,13 @@
 
 package com.exactpro.th2.conn.ditry.pillar.handler
 
-import com.exactpro.sf.util.DateTimeUtility
 import com.exactpro.th2.conn.ditry.pillar.handler.util.*
 import io.netty.buffer.ByteBuf
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.nio.charset.StandardCharsets
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 class MsgHeader(byteBuf: ByteBuf) {
     val type: Int
@@ -196,7 +196,7 @@ class SeqMsg(byteBuf: ByteBuf) {
         val time = byteBuf.readLongLE().toULong()
         val milliseconds = time / 1_000_000UL
         val nanoseconds = time % 1_000_000_000UL
-        timestamp = DateTimeUtility.toLocalDateTime(milliseconds.toLong(), nanoseconds.toInt())
+        timestamp = LocalDateTime.ofEpochSecond(milliseconds.toLong(), nanoseconds.toInt(), ZoneOffset.UTC)
     }
 
     fun seqMsg(): Map<String, String> {

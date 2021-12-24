@@ -26,48 +26,38 @@ import mu.KotlinLogging
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
-class PillarHandler(private val channel: Channel): IProtocolHandler {
-    private val logger = KotlinLogging.logger {}
+class PillarHandler(private val channel: Channel,
+                    private val settings: PillarHandlerSettings): IProtocolHandler {
+    companion object {
+        private val logger = KotlinLogging.logger { }
+    }
 
-    private var state = State.SESSION_CLOSE
-
-    val settings = PillarHandlerSettings()
+    private var state = AtomicReference(State.SESSION_CLOSE)
 
     private val executor = Executors.newSingleThreadScheduledExecutor()
 
     private var clientFuture: Future<*>? = null
 
-    private lateinit var sentHeartbeatCommand: Runnable
-
     private var serverFuture: Future<*>? = null
-
-    private lateinit var receivedHeartbeatCommand: Runnable
 
     private lateinit var streamId: StreamIdEncode
 
-    fun initCommand(){
+    init{
         if(settings.heartbeatInterval <= 0L) {
-            throw Exception("Heartbeat sending interval must be greater than zero")
-        }
-
-        sentHeartbeatCommand = Runnable {
-            startSendHeartBeats()
+            error("Heartbeat sending interval must be greater than zero")
         }
 
         if(settings.streamAvailInterval <= 0L) {
-            throw Exception("StreamAvail sending interval must be greater than zero")
-        }
-
-        receivedHeartbeatCommand = Runnable {
-            receivedHeartBeats()
+            error("StreamAvail sending interval must be greater than zero")
         }
     }
 
     override fun onOpen() {
-        when (state){
+        when (state.get()){
             State.SESSION_CLOSE -> {
-                state = State.SESSION_CREATED
+                state.getAndSet(State.SESSION_CREATED)
                 logger.info { "Setting a new state -> $state" }
 
                 channel.open()
@@ -75,7 +65,6 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
                 val login = Login(settings)
                 channel.send(login.login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
 
-                initCommand()
                 startSendHeartBeats()
                 logger.info { "Connected handler" }
             }
@@ -98,7 +87,7 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
 
         if (!MessageType.contains(messageType)){
             buffer.resetReaderIndex()
-            throw Exception ("Message type is not supported: $messageType")
+            error ("Message type is not supported: $messageType")
         }
 
         if(bufferLength < messageLength) {
@@ -129,19 +118,19 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
                 when (val status = Status.getStatus(mapLoginResponse[STATUS_FIELD_NAME]!!.toShort())) {
                     Status.OK -> {
                         logger.info("Login successful. Start sending heartbeats.")
-                        state = State.LOGGED_IN
+                        state.getAndSet(State.LOGGED_IN)
                         logger.info { "Setting a new state -> $state" }
                     }
                     Status.NOT_LOGGED_IN -> {
-                        if(state == State.SESSION_CREATED) {
+                        if(state.get() == State.SESSION_CREATED) {
                             stopSendHeartBeats()
-                            state = State.SESSION_CLOSE
+                            state.getAndSet(State.SESSION_CLOSE)
                         }
                         logger.info("Received `not logged in` status. Fall in to error state.")
-                        close()
+                        sendClose()
                     }
                     else -> {
-                        throw Exception("Received $status status.")
+                        error("Received $status status.")
                     }
                 }
                 return messageMetadata(MessageType.LOGIN_RESPONSE)
@@ -163,7 +152,7 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
                 )
 
                 serverFuture =
-                    executor.schedule(receivedHeartbeatCommand, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
+                    executor.schedule(this::startSendHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
 
                 return messageMetadata(MessageType.STREAM_AVAIL)
             }
@@ -180,7 +169,7 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
                         logger.warn { "No stream permission" }
                     }
                     else -> {
-                        throw Exception("This is not an OpenResponse status")
+                        error("This is not an OpenResponse status")
                     }
                 }
                 return messageMetadata(MessageType.OPEN_RESPONSE)
@@ -197,7 +186,7 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
                         logger.warn { "Stream not open" }
                     }
                     else -> {
-                        throw Exception("This is not an CloseResponse status")
+                        error("This is not an CloseResponse status")
                     }
                 }
                 return messageMetadata(MessageType.CLOSE_RESPONSE)
@@ -209,7 +198,7 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
             }
 
             else -> {
-                throw Exception("Message type is not supported: $msgType")
+                error("Message type is not supported: $msgType")
             }
         }
     }
@@ -223,9 +212,9 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
     }
 
     override fun onClose() {
-        when (state != State.SESSION_CLOSE) {
+        when (state.get() != State.SESSION_CLOSE) {
             true -> {
-                state = State.SESSION_CLOSE
+                state.getAndSet(State.SESSION_CLOSE)
                 logger.info { "Setting a new state -> $state" }
 
                 channel.close()
@@ -236,8 +225,12 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
     }
 
     override fun close() {
-        executor.shutdownNow()
-        state = State.LOGGED_OUT
+        executor.shutdown();
+        if (!executor.awaitTermination(5000, TimeUnit.MILLISECONDS)) executor.shutdownNow()
+    }
+
+    private fun sendClose(){
+        state.getAndSet(State.LOGGED_OUT)
         logger.info { "Setting a new state -> $state" }
         val close = Close(streamId.streamId())
         channel.send(close.close(), messageMetadata(MessageType.CLOSE), IChannel.SendMode.MANGLE)
@@ -246,7 +239,7 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
     private fun startSendHeartBeats(){
         val heartbeat = Heartbeat()
         channel.send(heartbeat.heartbeat(), messageMetadata(MessageType.HEARTBEAT), IChannel.SendMode.MANGLE)
-        clientFuture = executor.schedule(sentHeartbeatCommand, settings.heartbeatInterval, TimeUnit.MILLISECONDS)
+        clientFuture = executor.schedule(this::receivedHeartBeats, settings.heartbeatInterval, TimeUnit.MILLISECONDS)
     }
 
     private fun stopSendHeartBeats(){
@@ -257,9 +250,9 @@ class PillarHandler(private val channel: Channel): IProtocolHandler {
 
     private fun receivedHeartBeats(){
         logger.error { "Server stopped sending heartbeat" }
-        state = State.NOT_HEARTBEAT
+        state.getAndSet(State.NOT_HEARTBEAT)
         logger.info { "Setting a new state -> $state" }
-        close()
+        sendClose()
     }
 
     private fun messageMetadata(messageType: MessageType): Map<String, String>{

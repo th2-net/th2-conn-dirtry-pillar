@@ -33,10 +33,11 @@ class TestHandler {
     val eventLoopGroup: EventLoopGroup = NioEventLoopGroup()
     private val executor: Executor = mock (Executor::class.java)
     private val onError: (stream: String, error: Throwable) -> Unit = mock{}
-    private val actionExecutor = ActionStreamExecutor(executor, onError)
+    private val actionExecutor = ActionStreamExecutor(executor, 1000,  onError)
     val parentEventId = EventID.newBuilder().setId("root").build()!!
 
     private var channel = Channel(address, secure, sessionAlias, reconnectDelay, handler, mangler, onEvent, onMessage, eventLoopGroup, actionExecutor, parentEventId)
+    private var settings = PillarHandlerSettings()
 
     @Nested
     inner class Positive {
@@ -52,7 +53,7 @@ class TestHandler {
 
             val buffer: ByteBuf = Unpooled.buffer()
             buffer.writeBytes(raw)
-            val pillarHandler = PillarHandler(channel)
+            val pillarHandler = PillarHandler(channel, settings)
             val data = pillarHandler.onReceive(buffer)
             val returnMetadata = pillarHandler.onIncoming(data!!)
 
@@ -72,7 +73,7 @@ class TestHandler {
 
             val buffer: ByteBuf = Unpooled.buffer()
             buffer.writeBytes(raw)
-            val pillarHandler = PillarHandler(channel)
+            val pillarHandler = PillarHandler(channel, settings)
             val data = pillarHandler.onReceive(buffer)
             val returnMetadata = StreamAvail(data!!).streamAvail()
 
@@ -92,7 +93,7 @@ class TestHandler {
 
             val buffer: ByteBuf = Unpooled.buffer()
             buffer.writeBytes(raw)
-            val pillarHandler = PillarHandler(channel)
+            val pillarHandler = PillarHandler(channel, settings)
             val data = pillarHandler.onReceive(buffer)
             val  returnMetadata = pillarHandler.onIncoming(data!!)
 
@@ -111,7 +112,7 @@ class TestHandler {
 
             val buffer: ByteBuf = Unpooled.buffer()
             buffer.writeBytes(raw)
-            val pillarHandler = PillarHandler(channel)
+            val pillarHandler = PillarHandler(channel, settings)
             val data = pillarHandler.onReceive(buffer)
             val returnMetadata = pillarHandler.onIncoming(data!!)
 
@@ -132,7 +133,7 @@ class TestHandler {
 
             val buffer: ByteBuf = Unpooled.buffer()
             buffer.writeBytes(raw)
-            val pillarHandler = PillarHandler(channel)
+            val pillarHandler = PillarHandler(channel, settings)
             val data = pillarHandler.onReceive(buffer)
             val returnMetadata = pillarHandler.onIncoming(data!!)
 
@@ -210,14 +211,14 @@ class TestHandler {
             )
             val buffer: ByteBuf = Unpooled.buffer()
             buffer.writeBytes(raw)
-            val pillarHandler = PillarHandler(channel)
+            val pillarHandler = PillarHandler(channel, settings)
             assertEquals(null, pillarHandler.onReceive(buffer))
         }
 
         @Test
         fun `empty message`() {
             val buffer: ByteBuf = Unpooled.buffer()
-            val pillarHandler = PillarHandler(channel)
+            val pillarHandler = PillarHandler(channel, settings)
             assertEquals(null, pillarHandler.onReceive(buffer))
         }
 
@@ -228,7 +229,7 @@ class TestHandler {
             )
             val buffer: ByteBuf = Unpooled.buffer()
             buffer.writeBytes(raw)
-            val pillarHandler = PillarHandler(channel)
+            val pillarHandler = PillarHandler(channel, settings)
             val metadata = mutableMapOf<String, String>()
             metadata[TYPE_FIELD_NAME] = 12.toString()
             metadata[LENGTH_FIELD_NAME] = 12.toString()
@@ -248,16 +249,15 @@ class TestHandler {
             )
             val buffer: ByteBuf = Unpooled.buffer()
             buffer.writeBytes(raw)
-            val pillarHandler = PillarHandler(channel)
-            val exception = assertThrows<Exception> { pillarHandler.onReceive(buffer) }
+            val pillarHandler = PillarHandler(channel, settings)
+            val exception = assertThrows<IllegalStateException> { pillarHandler.onReceive(buffer) }
             assertEquals("Message type is not supported: 2313", exception.message)
         }
 
         @Test
         fun `invalid heartbeat interval`() {
-            val pillarHandler = PillarHandler(channel)
-            pillarHandler.settings.heartbeatInterval = 0L
-            val exception = assertThrows<Exception> { pillarHandler.initCommand() }
+            settings.heartbeatInterval = 0L
+            val exception = assertThrows<IllegalStateException> { PillarHandler(channel, settings) }
             assertEquals("Heartbeat sending interval must be greater than zero", exception.message)
         }
 
@@ -271,9 +271,9 @@ class TestHandler {
             )
             val buffer: ByteBuf = Unpooled.buffer()
             buffer.writeBytes(raw)
-            val pillarHandler = PillarHandler(channel)
+            val pillarHandler = PillarHandler(channel, settings)
             val data = pillarHandler.onReceive(buffer)
-            val exception = assertThrows<Exception> { pillarHandler.onIncoming(data!!) }
+            val exception = assertThrows<IllegalStateException> { pillarHandler.onIncoming(data!!) }
             assertEquals("Received STREAM_NOT_OPEN status.", exception.message)
         }
     }
