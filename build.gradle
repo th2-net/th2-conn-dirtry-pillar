@@ -72,6 +72,20 @@ application {
     mainClassName 'com.exactpro.th2.conn.dirty.tcp.core.MainKt'
 }
 
+applicationName = 'service'
+
+distTar {
+    archiveName "${applicationName}.tar"
+}
+
+dockerPrepare {
+    dependsOn distTar
+}
+
+docker {
+    copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
+}
+
 test {
     useJUnitPlatform()
 }
