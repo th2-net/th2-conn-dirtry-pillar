@@ -21,6 +21,9 @@ plugins {
     id 'application'
 }
 
+apply plugin: 'application'
+apply plugin: 'com.palantir.docker'
+
 group 'com.exactpro.th2'
 version release_version
 
@@ -37,11 +40,6 @@ repositories {
     }
 
     mavenLocal()
-
-    configurations.all {
-        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
-        resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
-    }
 }
 
 dependencies {

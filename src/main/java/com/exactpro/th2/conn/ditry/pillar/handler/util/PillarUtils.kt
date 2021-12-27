@@ -21,29 +21,7 @@ import kotlin.experimental.or
 
 const val TYPE_FIELD_NAME = "type"
 const val LENGTH_FIELD_NAME = "length"
-
-const val ENV_ID_FIELD_NAME = "env_id"
-const val SESS_NUM_FIELD_NAME = "sess_num"
-const val STREAM_TYPE_FIELD_NAME = "stream_type"
-const val USER_ID_FIELD_NAME = "user_id"
-const val SUB_ID_FIELD_NAME = "sub_id"
-
-const val USERNAME_FIELD_NAME = "username"
-const val PASSWORD_FIELD_NAME = "password"
-const val MIC_FIELD_NAME = "mic"
-const val VERSION_FIELD_NAME = "version"
-const val STATUS_FIELD_NAME = "status"
-
-const val START_SEQ_FIELD_NAME = "start_seq"
-const val END_SEQ_FIELD_NAME = "end_seq"
-const val NEXT_SEQ_FIELD_NAME = "next_seq"
-const val ACCESS_FIELD_NAME = "access"
-const val MODE_FIELD_NAME = "mode"
 const val MODE_LOSSY = 0
-
-const val SEQMSG_ID_FIELD_NAME = "seqmsg"
-const val RESERVED1_FIELD_NAME = "reserved1"
-const val TIMESTAMP_FIELD_NAME = "timestamp"
 
 enum class State(val value: Int){
     SESSION_CREATED(0),
@@ -53,7 +31,7 @@ enum class State(val value: Int){
     NOT_HEARTBEAT(4);
 }
 
-enum class Status(val value: Short) {
+enum class Status(val value: Byte) {
     OK(0),
     NOT_LOGGED_IN(18),
     INVALID_LOGIN_DETAILS(24),
@@ -65,7 +43,7 @@ enum class Status(val value: Short) {
     STREAM_NOT_OPEN(85);
 
     companion object {
-        fun getStatus(value: Short?): Status {
+        fun getStatus(value: Byte?): Status {
             return values().find { it.value == value }!!
         }
     }
@@ -87,13 +65,13 @@ enum class Access(val value: Short) {
     }
 }
 
-enum class StreamType (val value: Int){
+enum class StreamType (val value: Byte){
     TG(15),
     GT(13),
     REF(33),
     XDP(27);
     companion object {
-        fun getStream(value: Int?): StreamType? {
+        fun getStream(value: Byte?): StreamType? {
             return values().find { it.value == value }
         }
     }

@@ -23,13 +23,11 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings
 import com.exactpro.th2.conn.dirty.tcp.core.api.impl.Channel
 
 class PillarHandlerFactory: IProtocolHandlerFactory {
-    override val name: String
-        get() = PillarHandlerSettings::class.java.name
+    override val name: String = PillarHandlerSettings::class.java.name
 
-    override val settings: Class<out IProtocolHandlerSettings>
-        get() = PillarHandlerSettings::class.java
+    override val settings: Class<out IProtocolHandlerSettings> = PillarHandlerSettings::class.java
 
     override fun create(context: IContext<IProtocolHandlerSettings>): IProtocolHandler {
-        return PillarHandler(context.channel as Channel, context.settings as PillarHandlerSettings)
+        return PillarHandler(context.channel, context.settings as PillarHandlerSettings)
     }
 }

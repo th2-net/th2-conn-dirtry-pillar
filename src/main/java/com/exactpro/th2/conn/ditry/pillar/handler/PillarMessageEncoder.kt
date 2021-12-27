@@ -22,29 +22,28 @@ import com.exactpro.th2.conn.ditry.pillar.handler.util.MessageType
 import com.exactpro.th2.conn.ditry.pillar.handler.util.StreamType
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
+import java.math.BigDecimal
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 class Heartbeat{
-    private val type: Int = MessageType.HEARTBEAT.type
-    private val length: Int = MessageType.HEARTBEAT.length
+    val heartbeat: ByteBuf = Unpooled.buffer(MessageType.HEARTBEAT.length)
 
-    fun heartbeat (): ByteBuf {
-        val beat: ByteBuf = Unpooled.buffer(length)
-        beat.writeShort(type)
-        beat.writeShort(length)
-        return beat
+    init {
+        heartbeat.writeShort(MessageType.HEARTBEAT.type)
+        heartbeat.writeShort(MessageType.HEARTBEAT.length)
     }
 }
 
-class StreamIdEncode(var streamId: StreamId){
-    private val streamIdBuf: ByteBuf = Unpooled.buffer(8)
+class StreamIdEncode(var streamId: StreamId) {
+    val streamIdBuf: ByteBuf = Unpooled.buffer(8)
 
-    fun streamId(): ByteBuf{
+    init {
         streamIdBuf.writeByte(streamId.envId.toInt())
         streamIdBuf.writeMedium(streamId.sessNum)
         streamIdBuf.writeByte(streamId.streamType.toInt())
         streamIdBuf.writeShort(streamId.userId.toInt())
         streamIdBuf.writeByte(streamId.subId)
-        return streamIdBuf
     }
 }
 
@@ -58,18 +57,23 @@ class Login(settings: PillarHandlerSettings) {
 
     init {
         username = settings.username.encodeToByteArray()
+        require(username.size < 16 && username.isNotEmpty()) { "Size of username exceeds allowed size or equal to zero." }
         password = settings.password.encodeToByteArray()
+        require(password.size <= 32 && password.isNotEmpty()) { "Size of password exceeds allowed size or equal to zero." }
         mic = settings.mic.encodeToByteArray()
+        require(mic.size <= 4 && mic.isNotEmpty()) { "Size of mic exceeds allowed size or equal to zero." }
         version = settings.version.encodeToByteArray()
+        require(version.size <= 20 && version.isNotEmpty()) { "Size of version exceeds allowed size or equal to zero." }
     }
 
     fun login (): ByteBuf{
         val loginMessage: ByteBuf = Unpooled.buffer(length)
-        loginMessage.markWriterIndex()
 
+        loginMessage.markWriterIndex()
         loginMessage.writeShort(type)
         loginMessage.writeShort(length)
 
+        loginMessage.writerIndex(4)
         loginMessage.writeBytes(username)
 
         loginMessage.writerIndex(20)
@@ -80,41 +84,75 @@ class Login(settings: PillarHandlerSettings) {
 
         loginMessage.writerIndex(56)
         loginMessage.writeBytes(version)
+
+        require (length >= loginMessage.readableBytes()){ "Message size exceeded." }
+
         return loginMessage
     }
 }
 
-class Open(private val streamId: ByteBuf,
-           private val startSeq: Int,
-           private val streamType: Int){
+class Open(private val streamId: StreamId,
+           private val startSeq: BigDecimal){
     private val type: Int = MessageType.OPEN.type
     private val length: Int = MessageType.OPEN.length
 
     fun open(): ByteBuf{
         val openMessage: ByteBuf = Unpooled.buffer(length)
-        openMessage.markWriterIndex()
 
+        openMessage.markWriterIndex()
         openMessage.writeShort(type)
         openMessage.writeShort(length)
 
-        openMessage.writeBytes(streamId)
+        openMessage.writerIndex(4)
+        openMessage.writeBytes(StreamIdEncode(streamId).streamIdBuf)
 
         openMessage.writerIndex(12)
         openMessage.writeLongLE(startSeq.toLong())
-
         openMessage.writerIndex(20)
         openMessage.writeLongLE(startSeq.toLong()+1)
 
         openMessage.writerIndex(28)
-        if (streamType == StreamType.REF.value || streamType == StreamType.GT.value)
+        if (streamId.streamType == StreamType.REF.value || streamId.streamType == StreamType.GT.value)
             openMessage.writeByte(Access.READ.value.toInt())
-        else if (streamType == StreamType.TG.value)
+        else if (streamId.streamType == StreamType.TG.value)
             openMessage.writeByte(Access.WRITE.value.toInt())
 
-        openMessage.writerIndex(29)
         openMessage.writeByte(MODE_LOSSY)
 
+        require (length >= openMessage.writerIndex()){ "Message size exceeded." }
+
         return openMessage
+    }
+}
+
+class SeqMsgToSend(private val seqmsg: SeqMsg){
+    private val type: Int = MessageType.SEQMSG.type
+    private val length: Int = MessageType.SEQMSG.length
+
+    fun seqMsg(): ByteBuf {
+        val seqMsgMessage: ByteBuf = Unpooled.buffer(length)
+
+        seqMsgMessage.markWriterIndex()
+        seqMsgMessage.writeShort(type)
+        seqMsgMessage.writeShort(length)
+
+        seqMsgMessage.writerIndex(4)
+        seqmsg.streamId.streamType = StreamType.TG.value
+        seqMsgMessage.writeBytes(StreamIdEncode(seqmsg.streamId).streamIdBuf)
+        seqMsgMessage.writerIndex(12)
+        seqMsgMessage.writeByte(seqmsg.seqmsg)
+        seqMsgMessage.writerIndex(20)
+        seqMsgMessage.writeInt(seqmsg.reserved1)
+
+        seqMsgMessage.writerIndex(24)
+        val time = LocalDateTime.now()
+        val seconds = time.toEpochSecond(ZoneOffset.UTC).toULong()
+        val nanoseconds = time.nano.toULong()
+        seqMsgMessage.writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
+
+        require (length == seqMsgMessage.writerIndex()){ "Message size exceeded." }
+
+        return seqMsgMessage
     }
 }
 
@@ -124,13 +162,12 @@ class Close(private  val streamId: ByteBuf) {
 
     fun close(): ByteBuf {
         val closeMessage: ByteBuf = Unpooled.buffer(length)
-        closeMessage.markWriterIndex()
 
         closeMessage.writeShort(type)
         closeMessage.writeShort(length)
-
         closeMessage.writeBytes(streamId)
 
+        require (length == closeMessage.writerIndex()){ "Message size exceeded." }
         return closeMessage
     }
 }
