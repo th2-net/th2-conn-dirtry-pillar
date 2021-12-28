@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.exactpro.th2.conn.ditry.pillar.handler
+package com.exactpro.th2.conn.dirty.pillar.handler
 
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler

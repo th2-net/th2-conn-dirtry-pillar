@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.exactpro.th2.conn.ditry.pillar.handler.util
+package com.exactpro.th2.conn.dirty.pillar.handler.util
 
 import kotlin.experimental.and
 import kotlin.experimental.or

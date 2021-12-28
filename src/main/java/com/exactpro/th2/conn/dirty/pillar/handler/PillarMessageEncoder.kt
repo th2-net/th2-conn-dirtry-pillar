@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.exactpro.th2.conn.ditry.pillar.handler
+package com.exactpro.th2.conn.dirty.pillar.handler
 
-import com.exactpro.th2.conn.ditry.pillar.handler.util.Access
-import com.exactpro.th2.conn.ditry.pillar.handler.util.MODE_LOSSY
-import com.exactpro.th2.conn.ditry.pillar.handler.util.MessageType
-import com.exactpro.th2.conn.ditry.pillar.handler.util.StreamType
+import com.exactpro.th2.conn.dirty.pillar.handler.util.Access
+import com.exactpro.th2.conn.dirty.pillar.handler.util.MODE_LOSSY
+import com.exactpro.th2.conn.dirty.pillar.handler.util.MessageType
+import com.exactpro.th2.conn.dirty.pillar.handler.util.StreamType
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import java.math.BigDecimal

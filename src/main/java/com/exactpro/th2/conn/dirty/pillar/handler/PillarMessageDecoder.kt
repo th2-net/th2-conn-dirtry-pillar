@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.exactpro.th2.conn.ditry.pillar.handler
+package com.exactpro.th2.conn.dirty.pillar.handler
 
 import io.netty.buffer.ByteBuf
 import java.math.BigDecimal

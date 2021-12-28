@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.exactpro.th2.conn.ditry.pillar.handler
+package com.exactpro.th2.conn.dirty.pillar.handler
 
+import com.exactpro.th2.conn.dirty.pillar.handler.util.*
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler
-import com.exactpro.th2.conn.ditry.pillar.handler.util.*
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import mu.KotlinLogging
@@ -29,7 +29,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 class PillarHandler(private val channel: IChannel,
-                    private val settings: PillarHandlerSettings): IProtocolHandler {
+                    private val settings: PillarHandlerSettings
+): IProtocolHandler {
 
     private var state = AtomicReference(State.SESSION_CLOSE)
     private val executor = Executors.newSingleThreadScheduledExecutor()
