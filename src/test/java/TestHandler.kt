@@ -28,7 +28,6 @@ import io.netty.buffer.Unpooled
 import io.netty.channel.EventLoopGroup
 import io.netty.channel.nio.NioEventLoopGroup
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.Mockito.mock
@@ -113,7 +112,7 @@ class TestHandler {
         assertEquals(5, streamAvail.streamId.envId)
         assertEquals(4259845, streamAvail.streamId.sessNum)
         assertEquals(15, streamAvail.streamId.streamType)
-        assertEquals(40287.toUShort(), streamAvail.streamId.userId)
+        assertEquals(40287, streamAvail.streamId.userId)
         assertEquals(4, streamAvail.streamId.subId)
     }
 
@@ -140,7 +139,7 @@ class TestHandler {
         assertEquals(5, openResponseMsg.streamId.envId)
         assertEquals(4259845, openResponseMsg.streamId.sessNum)
         assertEquals(15, openResponseMsg.streamId.streamType)
-        assertEquals(40287.toUShort(), openResponseMsg.streamId.userId)
+        assertEquals(40287, openResponseMsg.streamId.userId)
         assertEquals(4, openResponseMsg.streamId.subId)
         assertEquals(0, openResponseMsg.status)
         assertEquals(2, openResponseMsg.access)
@@ -168,7 +167,7 @@ class TestHandler {
         assertEquals(5, closeResponseMsg.streamId.envId)
         assertEquals(4259845, closeResponseMsg.streamId.sessNum)
         assertEquals(15, closeResponseMsg.streamId.streamType)
-        assertEquals(40287.toUShort(), closeResponseMsg.streamId.userId)
+        assertEquals(40287, closeResponseMsg.streamId.userId)
         assertEquals(4, closeResponseMsg.streamId.subId)
         assertEquals(0, closeResponseMsg.status)
     }
@@ -195,9 +194,9 @@ class TestHandler {
         assertEquals(5, seqMsg.streamId.envId)
         assertEquals(4259845, seqMsg.streamId.sessNum)
         assertEquals(13, seqMsg.streamId.streamType)
-        assertEquals(40287.toUShort(), seqMsg.streamId.userId)
+        assertEquals(40287, seqMsg.streamId.userId)
         assertEquals(4, seqMsg.streamId.subId)
-        assertEquals(23, seqMsg.seqmsg)
+        assertEquals(BigDecimal.valueOf(23), seqMsg.seq)
         assertEquals(0, seqMsg.reserved1)
         assertEquals("2021-12-27T13:39:14.524104", seqMsg.timestamp.toString())
     }
@@ -205,7 +204,7 @@ class TestHandler {
     @Test
     fun `assembling Login`() {
         val settings = PillarHandlerSettings()
-        val login = Login(settings).login().array()
+        val login = Login(settings).login()
         val raw = byteArrayOf(
             2, 1,   //type:513
             0, 76,  //length:76
@@ -216,8 +215,10 @@ class TestHandler {
             49, 46, 49, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0 // version
         )
 
+        assertEquals(76, login.writerIndex())
+
         for (i in raw.indices)
-            assertEquals(raw[i], login[i])
+            assertEquals(raw[i], login.array()[i])
     }
 
     @Test
@@ -227,7 +228,7 @@ class TestHandler {
         )
         val buffer: ByteBuf = Unpooled.buffer()
         buffer.writeBytes(stream)
-        val open = Open(StreamId(buffer), BigDecimal.valueOf(23)).open().array()
+        val open = Open(StreamId(buffer), BigDecimal.valueOf(23)).open()
 
         val raw = byteArrayOf(
             2, 5,   //type:517,
@@ -239,8 +240,10 @@ class TestHandler {
             0, //mode
         )
 
-        for (i in open.indices)
-            assertEquals(raw[i], open[i])
+        assertEquals(30, open.writerIndex())
+
+        for (i in raw.indices)
+            assertEquals(raw[i], open.array()[i])
     }
 
     @Test
@@ -257,7 +260,7 @@ class TestHandler {
         buffer.writeBytes(rawSend)
         val seqMsg = SeqMsg(buffer)
 
-        val seqMsgToSend = SeqMsgToSend(seqMsg).seqMsg().array()
+        val seqMsgToSend = SeqMsgToSend(seqMsg).seqMsg()
 
         val raw = byteArrayOf(
             9, 5, //type
@@ -267,8 +270,10 @@ class TestHandler {
             0, 0, 0, 0 //reserved1
         )
 
+        assertEquals(32, seqMsgToSend.writerIndex())
+
         for (i in raw.indices)
-            assertEquals(raw[i], seqMsgToSend[i])
+            assertEquals(raw[i], seqMsgToSend.array()[i])
     }
 
     @Test
@@ -280,7 +285,7 @@ class TestHandler {
         val buffer: ByteBuf = Unpooled.buffer()
         buffer.writeBytes(stream)
         val streamId = StreamIdEncode(StreamId(buffer))
-        val close = Close(streamId.streamIdBuf).close().array()
+        val close = Close(streamId.streamIdBuf).close()
 
         val raw = byteArrayOf(
             2, 7,
@@ -288,8 +293,10 @@ class TestHandler {
             5, 65, 0, 5, 15, -99, 95, 4,
         )
 
-        for (i in close.indices)
-            assertEquals(raw[i], close[i])
+        assertEquals(12, close.writerIndex())
+
+        for (i in raw.indices)
+            assertEquals(raw[i], close.array()[i])
     }
 
     @Test

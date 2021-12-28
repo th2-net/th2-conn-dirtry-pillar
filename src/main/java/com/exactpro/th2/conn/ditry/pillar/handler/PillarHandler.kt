@@ -44,13 +44,13 @@ class PillarHandler(private val channel: IChannel,
 
     override fun onOpen() {
         if (state.compareAndSet(State.SESSION_CLOSE, State.SESSION_CREATED)) {
-            LOGGER.info { "Setting a new state -> $state." }
+            LOGGER.info { "Setting a new state -> ${state.get()}." }
 
             channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
 
             startSendHeartBeats()
             LOGGER.info { "Handler is connected." }
-        } else LOGGER.info { "Failed to set a new state. $state -> ${State.SESSION_CREATED}." }
+        } else LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
     }
 
     override fun onReceive(buffer: ByteBuf): ByteBuf? {
@@ -104,12 +104,13 @@ class PillarHandler(private val channel: IChannel,
                                 State.SESSION_CREATED,
                                 State.LOGGED_IN
                             )
-                        ) LOGGER.info { "Setting a new state -> $state." }
-                        else LOGGER.info { "Failed to set a new state. $state -> ${State.LOGGED_IN}." }
+                        ) LOGGER.info { "Setting a new state -> ${state.get()}." }
+                        else LOGGER.info { "Failed to set a new state. ${State.LOGGED_IN} -> ${state.get()}." }
                     }
                     Status.NOT_LOGGED_IN -> {
                         if (state.compareAndSet(State.SESSION_CREATED, State.SESSION_CLOSE)) stopSendHeartBeats()
-                        else LOGGER.info { "Failed to set a new state. $state -> ${State.SESSION_CLOSE}." }
+                        else LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
+
                         LOGGER.info("Received `not logged in` status. Fall in to error state.")
                         sendClose()
                     }
@@ -184,11 +185,11 @@ class PillarHandler(private val channel: IChannel,
     }
 
     override fun onClose() {
-        if (!state.compareAndSet(State.SESSION_CLOSE, State.SESSION_CLOSE)) {
+        if (state.compareAndSet(state.get(), State.SESSION_CLOSE)) {
             state.getAndSet(State.SESSION_CLOSE)
-            LOGGER.info { "Setting a new state -> $state." }
+            LOGGER.info { "Setting a new state -> ${state.get()}." }
             LOGGER.info { "Handler is disconnected." }
-        } else LOGGER.info { "Failed to set a new state. $state -> ${State.SESSION_CLOSE}." }
+        } else LOGGER.info { "Failed to set a new state." }
     }
 
     override fun close() {
@@ -197,15 +198,15 @@ class PillarHandler(private val channel: IChannel,
     }
 
     private fun sendClose() {
-        if (!state.compareAndSet(State.LOGGED_OUT, State.LOGGED_OUT)) {
+        if (state.compareAndSet(state.get(), State.LOGGED_OUT)) {
             state.getAndSet(State.LOGGED_OUT)
-            LOGGER.info { "Setting a new state -> $state." }
+            LOGGER.info { "Setting a new state -> ${state.get()}." }
             channel.send(
                 Close(streamId.streamIdBuf).close(),
                 messageMetadata(MessageType.CLOSE),
                 IChannel.SendMode.MANGLE
             )
-        } else LOGGER.info { "Failed to set a new state. $state -> ${State.LOGGED_OUT}." }
+        } else LOGGER.info { "Failed to set a new state." }
     }
 
     private fun startSendHeartBeats() {
@@ -218,12 +219,12 @@ class PillarHandler(private val channel: IChannel,
     }
 
     private fun receivedHeartBeats() {
-        if (!state.compareAndSet(State.NOT_HEARTBEAT, State.NOT_HEARTBEAT)) {
+        if (state.compareAndSet(state.get(), State.NOT_HEARTBEAT)) {
             LOGGER.error { "Server stopped sending heartbeat." }
             state.getAndSet(State.NOT_HEARTBEAT)
-            LOGGER.info { "Setting a new state -> $state." }
+            LOGGER.info { "Setting a new state -> ${state.get()}." }
             sendClose()
-        } else LOGGER.info { "Failed to set a new state. $state -> ${State.NOT_HEARTBEAT}." }
+        } else LOGGER.info { "Failed to set a new state." }
     }
 
     private fun messageMetadata(messageType: MessageType): Map<String, String>{

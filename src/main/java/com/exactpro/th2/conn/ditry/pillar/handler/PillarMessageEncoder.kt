@@ -42,7 +42,7 @@ class StreamIdEncode(var streamId: StreamId) {
         streamIdBuf.writeByte(streamId.envId.toInt())
         streamIdBuf.writeMedium(streamId.sessNum)
         streamIdBuf.writeByte(streamId.streamType.toInt())
-        streamIdBuf.writeShort(streamId.userId.toInt())
+        streamIdBuf.writeShort(streamId.userId)
         streamIdBuf.writeByte(streamId.subId)
     }
 }
@@ -57,7 +57,7 @@ class Login(settings: PillarHandlerSettings) {
 
     init {
         username = settings.username.encodeToByteArray()
-        require(username.size < 16 && username.isNotEmpty()) { "Size of username exceeds allowed size or equal to zero." }
+        require(username.size <= 16 && username.isNotEmpty()) { "Size of username exceeds allowed size or equal to zero." }
         password = settings.password.encodeToByteArray()
         require(password.size <= 32 && password.isNotEmpty()) { "Size of password exceeds allowed size or equal to zero." }
         mic = settings.mic.encodeToByteArray()
@@ -85,8 +85,9 @@ class Login(settings: PillarHandlerSettings) {
         loginMessage.writerIndex(56)
         loginMessage.writeBytes(version)
 
-        require (length >= loginMessage.readableBytes()){ "Message size exceeded." }
+        loginMessage.writerIndex(76)
 
+        require ( loginMessage.writerIndex() == length){ "Message size exceeded." }
         return loginMessage
     }
 }
@@ -109,7 +110,7 @@ class Open(private val streamId: StreamId,
         openMessage.writerIndex(12)
         openMessage.writeLongLE(startSeq.toLong())
         openMessage.writerIndex(20)
-        openMessage.writeLongLE(startSeq.toLong()+1)
+        openMessage.writeLongLE(startSeq.toLong()+1) //TODO
 
         openMessage.writerIndex(28)
         if (streamId.streamType == StreamType.REF.value || streamId.streamType == StreamType.GT.value)
@@ -119,8 +120,7 @@ class Open(private val streamId: StreamId,
 
         openMessage.writeByte(MODE_LOSSY)
 
-        require (length >= openMessage.writerIndex()){ "Message size exceeded." }
-
+        require (openMessage.writerIndex() == length){ "Message size exceeded." }
         return openMessage
     }
 }
@@ -140,7 +140,7 @@ class SeqMsgToSend(private val seqmsg: SeqMsg){
         seqmsg.streamId.streamType = StreamType.TG.value
         seqMsgMessage.writeBytes(StreamIdEncode(seqmsg.streamId).streamIdBuf)
         seqMsgMessage.writerIndex(12)
-        seqMsgMessage.writeByte(seqmsg.seqmsg)
+        seqMsgMessage.writeByte(seqmsg.seq.toInt())
         seqMsgMessage.writerIndex(20)
         seqMsgMessage.writeInt(seqmsg.reserved1)
 
@@ -150,8 +150,7 @@ class SeqMsgToSend(private val seqmsg: SeqMsg){
         val nanoseconds = time.nano.toULong()
         seqMsgMessage.writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
 
-        require (length == seqMsgMessage.writerIndex()){ "Message size exceeded." }
-
+        require (seqMsgMessage.writerIndex() == length){ "Message size exceeded." }
         return seqMsgMessage
     }
 }
@@ -167,7 +166,7 @@ class Close(private  val streamId: ByteBuf) {
         closeMessage.writeShort(length)
         closeMessage.writeBytes(streamId)
 
-        require (length == closeMessage.writerIndex()){ "Message size exceeded." }
+        require (closeMessage.writerIndex() == length){ "Message size exceeded." }
         return closeMessage
     }
 }

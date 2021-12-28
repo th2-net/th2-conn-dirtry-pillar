@@ -31,7 +31,7 @@ enum class State(val value: Int){
     NOT_HEARTBEAT(4);
 }
 
-enum class Status(val value: Byte) {
+enum class Status(val value: Short) {
     OK(0),
     NOT_LOGGED_IN(18),
     INVALID_LOGIN_DETAILS(24),
@@ -43,7 +43,7 @@ enum class Status(val value: Byte) {
     STREAM_NOT_OPEN(85);
 
     companion object {
-        fun getStatus(value: Byte?): Status {
+        fun getStatus(value: Short): Status {
             return values().find { it.value == value }!!
         }
     }
@@ -71,7 +71,7 @@ enum class StreamType (val value: Byte){
     REF(33),
     XDP(27);
     companion object {
-        fun getStream(value: Byte?): StreamType? {
+        fun getStream(value: Byte): StreamType? {
             return values().find { it.value == value }
         }
     }
@@ -89,7 +89,7 @@ enum class MessageType(val type: Int, val length: Int) {
     SEQMSG(2309, 32);
 
     companion object {
-        fun getEnum(type: Int?): MessageType? {
+        fun getEnum(type: Int): MessageType? {
             return values().find { it.type == type }
         }
 
