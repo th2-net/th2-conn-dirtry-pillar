@@ -17,12 +17,13 @@
 import com.exactpro.th2.common.event.Event
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.RawMessage
+import com.exactpro.th2.conn.dirty.pillar.handler.*
+import com.exactpro.th2.conn.dirty.pillar.handler.util.LENGTH_FIELD_NAME
+import com.exactpro.th2.conn.dirty.pillar.handler.util.TYPE_FIELD_NAME
 import com.exactpro.th2.conn.dirty.tcp.core.ActionStreamExecutor
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolMangler
 import com.exactpro.th2.conn.dirty.tcp.core.api.impl.Channel
-import com.exactpro.th2.conn.ditry.pillar.handler.*
-import com.exactpro.th2.conn.ditry.pillar.handler.util.*
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import io.netty.channel.EventLoopGroup
