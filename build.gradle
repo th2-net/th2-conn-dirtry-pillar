@@ -61,7 +61,7 @@ dependencies {
 }
 
 application {
-    mainClassName 'com.exactpro.th2.conn.dirty.tcp.core.MainKt'
+    mainClassName 'com.exactpro.th2.conn.dirty.tcp.core.Main'
 }
 
 applicationName = 'service'
