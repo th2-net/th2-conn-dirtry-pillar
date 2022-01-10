@@ -28,6 +28,6 @@ class PillarHandlerFactory: IProtocolHandlerFactory {
     override val settings: Class<out IProtocolHandlerSettings> = PillarHandlerSettings::class.java
 
     override fun create(context: IContext<IProtocolHandlerSettings>): IProtocolHandler {
-        return PillarHandler(context.channel, context.settings as PillarHandlerSettings)
+        return PillarHandler(context)
     }
 }

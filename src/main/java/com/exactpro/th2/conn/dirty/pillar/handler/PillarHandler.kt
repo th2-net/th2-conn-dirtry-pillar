@@ -18,7 +18,10 @@ package com.exactpro.th2.conn.dirty.pillar.handler
 
 import com.exactpro.th2.conn.dirty.pillar.handler.util.*
 import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel
+import com.exactpro.th2.conn.dirty.tcp.core.api.IContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler
+import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings
+import com.exactpro.th2.conn.dirty.tcp.core.api.impl.Channel
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import mu.KotlinLogging
@@ -28,17 +31,18 @@ import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-class PillarHandler(private val channel: IChannel,
-                    private val settings: PillarHandlerSettings
-): IProtocolHandler {
+class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IProtocolHandler {
 
     private var state = AtomicReference(State.SESSION_CLOSE)
     private val executor = Executors.newSingleThreadScheduledExecutor()
     private var clientFuture: Future<*>? = CompletableFuture.completedFuture(null)
     private var serverFuture: Future<*>? = CompletableFuture.completedFuture(null)
     private lateinit var streamId: StreamIdEncode
+    private var settings: PillarHandlerSettings
+    lateinit var channel: IChannel
 
     init{
+        settings = context.settings as PillarHandlerSettings
         require(settings.heartbeatInterval > 0) { "Heartbeat sending interval must be greater than zero." }
         require(settings.streamAvailInterval > 0) { "StreamAvail sending interval must be greater than zero." }
     }
@@ -47,6 +51,7 @@ class PillarHandler(private val channel: IChannel,
         if (state.compareAndSet(State.SESSION_CLOSE, State.SESSION_CREATED)) {
             LOGGER.info { "Setting a new state -> ${state.get()}." }
 
+            channel = context.channel
             channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
 
             startSendHeartBeats()
