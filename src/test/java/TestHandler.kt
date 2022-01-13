@@ -91,12 +91,10 @@ class TestHandler {
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
-        val metadata = pillarHandler.onIncoming(message!!)
-        val loginResponseMsg = LoginResponse(message)
+        val loginResponseMsg = LoginResponse(message!!)
 
-        assertEquals(514.toString(), metadata[TYPE_FIELD_NAME])
-        assertEquals(21.toString(), metadata[LENGTH_FIELD_NAME])
-
+        assertEquals(514, loginResponseMsg.header.type)
+        assertEquals(21, loginResponseMsg.header.length)
         assertEquals("username", loginResponseMsg.username)
         assertEquals(0, loginResponseMsg.status)
     }

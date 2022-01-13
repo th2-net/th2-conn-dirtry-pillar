@@ -53,8 +53,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             channel = context.channel
             channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
             LOGGER.info { "Message has been sent to server - Login" }
-            
-            startSendHeartBeats()
+
             LOGGER.info { "Handler is connected." }
         } else LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
     }
@@ -106,6 +105,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                 when (val status = Status.getStatus(loginResponse.status)) {
                     Status.OK -> {
                         LOGGER.info("Login successful. Start sending heartbeats.")
+                        startSendHeartBeats()
+
                         if (state.compareAndSet(
                                 State.SESSION_CREATED,
                                 State.LOGGED_IN
