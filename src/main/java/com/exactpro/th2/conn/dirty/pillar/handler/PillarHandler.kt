@@ -78,7 +78,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
         if (!MessageType.contains(messageType)){
             buffer.resetReaderIndex()
-            LOGGER.error { "Message type is not supported: $messageType." }
+            LOGGER.error { "Message type is not supported. Type: $messageType, length: $messageLength" }
             return null
         }
 
