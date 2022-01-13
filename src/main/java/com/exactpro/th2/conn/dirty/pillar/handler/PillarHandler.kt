@@ -21,7 +21,6 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IChannel
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings
-import com.exactpro.th2.conn.dirty.tcp.core.api.impl.Channel
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import mu.KotlinLogging
@@ -53,7 +52,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
             channel = context.channel
             channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
-
+            LOGGER.info { "Message has been sent to server - Login" }
+            
             startSendHeartBeats()
             LOGGER.info { "Handler is connected." }
         } else LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
@@ -138,6 +138,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                     open.open(),
                     messageMetadata(MessageType.OPEN), IChannel.SendMode.MANGLE
                 )
+                LOGGER.info { "Message has been sent to server - Open" }
 
                 serverFuture =
                     executor.schedule(this::startSendHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
@@ -164,6 +165,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                     messageMetadata(MessageType.SEQMSG),
                     IChannel.SendMode.MANGLE
                 )
+                LOGGER.info { "Message has been sent to server - SeqMsg" }
                 return messageMetadata(MessageType.SEQMSG)
             }
 
@@ -212,11 +214,13 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                 messageMetadata(MessageType.CLOSE),
                 IChannel.SendMode.MANGLE
             )
+            LOGGER.info { "Message has been sent to server - Close" }
         } else LOGGER.info { "Failed to set a new state." }
     }
 
     private fun startSendHeartBeats() {
         channel.send(Heartbeat().heartbeat, messageMetadata(MessageType.HEARTBEAT), IChannel.SendMode.MANGLE)
+        LOGGER.info { "Message has been sent to server - Heartbeat" }
         clientFuture = executor.schedule(this::receivedHeartBeats, settings.heartbeatInterval, TimeUnit.MILLISECONDS)
     }
 
