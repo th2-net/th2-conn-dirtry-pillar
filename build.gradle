@@ -46,7 +46,7 @@ dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
     implementation 'com.exactpro.th2:common:3.31.5'
-    implementation 'com.exactpro.th2:conn-dirty-tcp-core:0.0.1-dev-1676617005-SNAPSHOT'
+    implementation 'com.exactpro.th2:conn-dirty-tcp-core:0.0.1-th2-2785-1688122774-SNAPSHOT'
 
     implementation 'io.netty:netty-all:4.1.72.Final'
 

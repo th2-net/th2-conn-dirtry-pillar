@@ -21,7 +21,7 @@ import com.exactpro.th2.common.schema.dictionary.DictionaryType
 import com.exactpro.th2.conn.dirty.pillar.handler.*
 import com.exactpro.th2.conn.dirty.pillar.handler.util.LENGTH_FIELD_NAME
 import com.exactpro.th2.conn.dirty.pillar.handler.util.TYPE_FIELD_NAME
-import com.exactpro.th2.conn.dirty.tcp.core.ActionStreamExecutor
+import com.exactpro.th2.conn.dirty.tcp.core.TaskSequencePool
 import com.exactpro.th2.conn.dirty.tcp.core.api.IContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings
@@ -54,8 +54,7 @@ class TestHandler {
     private val onMessage: (RawMessage) -> Unit = mock { }
     private val eventLoopGroup: EventLoopGroup = NioEventLoopGroup()
     private val executor: Executor = mock(Executor::class.java)
-    private val onError: (stream: String, error: Throwable) -> Unit = mock {}
-    private val actionExecutor = ActionStreamExecutor(executor, 1000, onError)
+    private val sequencePool = TaskSequencePool(executor)
     private val parentEventId = EventID.newBuilder().setId("root").build()!!
 
     private var channel = Channel(
@@ -68,7 +67,7 @@ class TestHandler {
         onEvent,
         onMessage,
         eventLoopGroup,
-        actionExecutor,
+        sequencePool,
         parentEventId
     )
     private val handlerSettings = PillarHandlerSettings()
