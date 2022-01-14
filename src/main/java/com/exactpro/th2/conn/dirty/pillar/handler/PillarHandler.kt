@@ -108,13 +108,14 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                 when (val status = Status.getStatus(loginResponse.status)) {
                     Status.OK -> {
                         LOGGER.info("Login successful. Start sending heartbeats.")
-                        serverFuture = executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
 
                         if (state.compareAndSet(
                                 State.SESSION_CREATED,
                                 State.LOGGED_IN
                             )
-                        ) LOGGER.info { "Setting a new state -> ${state.get()}."
+                        ){
+                            LOGGER.info ("Setting a new state -> ${state.get()}.")
+                            serverFuture = executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
                         }
                         else LOGGER.info { "Failed to set a new state. ${State.LOGGED_IN} -> ${state.get()}." }
                     }
@@ -132,6 +133,9 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
             MessageType.STREAM_AVAIL.type -> {
                 LOGGER.info { "Type message - StreamAvail." }
+
+                serverFuture = executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
+
                 val streamAvail = StreamAvail(message)
                 streamId = StreamIdEncode(StreamId(message))
                 val open = Open(

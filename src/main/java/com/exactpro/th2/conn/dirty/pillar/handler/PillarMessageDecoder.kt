@@ -159,7 +159,6 @@ class SeqMsg(byteBuf: ByteBuf) {
         val nanoseconds = time % 1_000_000_000UL
         timestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(milliseconds.toLong()), ZoneOffset.UTC).withNano(
             nanoseconds.toInt())
-        println(timestamp)
         require(byteBuf.readerIndex() == header.length){ "There are bytes left in buffer to read" }
     }
 }
