@@ -236,10 +236,13 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
     private fun reconnect() {
         LOGGER.info { "Reconnect." }
-        if (state.compareAndSet(state.get(), State.SESSION_CLOSE)) {
-            state.getAndSet(State.SESSION_CLOSE)
+        if (state.compareAndSet(state.get(), State.SESSION_CREATED)) {
+            state.getAndSet(State.SESSION_CREATED)
             LOGGER.info { "Setting a new state -> ${state.get()}." }
-        } else LOGGER.info { "Failed to set a new state SESSION_CLOSE." }
+
+            channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
+            LOGGER.info { "Message has been sent to server - Login." }
+        } else LOGGER.info { "Failed to set a new state SESSION_CREATED." }
     }
 
     private fun receivedHeartBeats() {
