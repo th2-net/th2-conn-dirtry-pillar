@@ -108,6 +108,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                 when (val status = Status.getStatus(loginResponse.status)) {
                     Status.OK -> {
                         LOGGER.info("Login successful. Start sending heartbeats.")
+                        serverFuture = executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
 
                         if (state.compareAndSet(
                                 State.SESSION_CREATED,
@@ -143,9 +144,6 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                     messageMetadata(MessageType.OPEN), IChannel.SendMode.MANGLE
                 )
                 LOGGER.info { "Message has been sent to server - Open." }
-
-                serverFuture =
-                    executor.schedule(this::startSendHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
 
                 return messageMetadata(MessageType.STREAM_AVAIL)
             }
@@ -227,7 +225,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     private fun startSendHeartBeats() {
         channel.send(Heartbeat().heartbeat, messageMetadata(MessageType.HEARTBEAT), IChannel.SendMode.MANGLE)
         LOGGER.info { "Message has been sent to server - Heartbeat." }
-        clientFuture = executor.schedule(this::receivedHeartBeats, settings.heartbeatInterval, TimeUnit.MILLISECONDS)
+        clientFuture = executor.schedule(this::startSendHeartBeats, settings.heartbeatInterval, TimeUnit.MILLISECONDS)
     }
 
     private fun stopSendHeartBeats() {
