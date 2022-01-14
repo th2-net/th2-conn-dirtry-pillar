@@ -30,8 +30,8 @@ class Heartbeat{
     val heartbeat: ByteBuf = Unpooled.buffer(MessageType.HEARTBEAT.length)
 
     init {
-        heartbeat.writeShort(MessageType.HEARTBEAT.type)
-        heartbeat.writeShort(MessageType.HEARTBEAT.length)
+        heartbeat.writeShortLE(MessageType.HEARTBEAT.type)
+        heartbeat.writeShortLE(MessageType.HEARTBEAT.length)
     }
 }
 
@@ -70,8 +70,8 @@ class Login(settings: PillarHandlerSettings) {
         val loginMessage: ByteBuf = Unpooled.buffer(length)
 
         loginMessage.markWriterIndex()
-        loginMessage.writeShort(type)
-        loginMessage.writeShort(length)
+        loginMessage.writeShortLE(type)
+        loginMessage.writeShortLE(length)
 
         loginMessage.writerIndex(4)
         loginMessage.writeBytes(username)
@@ -101,8 +101,8 @@ class Open(private val streamId: StreamId,
         val openMessage: ByteBuf = Unpooled.buffer(length)
 
         openMessage.markWriterIndex()
-        openMessage.writeShort(type)
-        openMessage.writeShort(length)
+        openMessage.writeShortLE(type)
+        openMessage.writeShortLE(length)
 
         openMessage.writerIndex(4)
         openMessage.writeBytes(StreamIdEncode(streamId).streamIdBuf)
@@ -133,8 +133,8 @@ class SeqMsgToSend(private val seqmsg: SeqMsg){
         val seqMsgMessage: ByteBuf = Unpooled.buffer(length)
 
         seqMsgMessage.markWriterIndex()
-        seqMsgMessage.writeShort(type)
-        seqMsgMessage.writeShort(length)
+        seqMsgMessage.writeShortLE(type)
+        seqMsgMessage.writeShortLE(length)
 
         seqMsgMessage.writerIndex(4)
         seqmsg.streamId.streamType = StreamType.TG.value
@@ -162,8 +162,8 @@ class Close(private  val streamId: ByteBuf) {
     fun close(): ByteBuf {
         val closeMessage: ByteBuf = Unpooled.buffer(length)
 
-        closeMessage.writeShort(type)
-        closeMessage.writeShort(length)
+        closeMessage.writeShortLE(type)
+        closeMessage.writeShortLE(length)
         closeMessage.writeBytes(streamId)
 
         require (closeMessage.writerIndex() == length){ "Message size exceeded." }

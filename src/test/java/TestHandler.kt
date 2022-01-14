@@ -40,7 +40,11 @@ import com.nhaarman.mockitokotlin2.mock
 import org.junit.jupiter.api.Assertions.assertNull
 import java.io.InputStream
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.net.InetSocketAddress
+import java.nio.charset.StandardCharsets
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.util.concurrent.Executor
 
 class TestHandler {
@@ -72,22 +76,20 @@ class TestHandler {
     )
     private val handlerSettings = PillarHandlerSettings()
     private val readDictionary: (DictionaryType) -> InputStream = mock { }
-    val sendEvent: (Event) -> Unit = mock { }
+    private val sendEvent: (Event) -> Unit = mock { }
     private var context: IContext<IProtocolHandlerSettings> = Context(handlerSettings, readDictionary, sendEvent)
     private var settings = PillarHandlerSettings()
 
     @Test
     fun `sending LoginResponse with extra bytes`() {
-        val raw = byteArrayOf(
-            2, 2, //type,
-            0, 21, //length
-            117, 115, 101, 114, 110, 97, 109, 101, 0, 0, 0, 0, 0, 0, 0, 0, //username
-            0, //status
-            117, 115, 101 //extra bytes
-        )
-
         val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeBytes(raw)
+        buffer.writeShortLE(514)
+            .writeShortLE(21)
+            .writeBytes("username".encodeToByteArray())
+            .writerIndex(20)
+            .writeByte(0)
+            .writeShortLE(514)
+
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
@@ -101,16 +103,18 @@ class TestHandler {
 
     @Test
     fun `sending StreamAvail`() {
-        val raw = byteArrayOf(
-            2, 3, //type,
-            0, 21, //length
-            5, 65, 0, 5, 15, -99, 95, 4, //stream_id: env_id(1), sess_num(3), stream_type, user_id(2), sub_id(1)
-            23, 0, 0, 0, 0, 0, 0, 0, //next_seq
-            6 //access
-        )
-
         val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeBytes(raw)
+        buffer.writeShortLE(515)
+            .writeShortLE(21)
+            .writeByte(5)
+            .writeMedium(4259845)
+            .writeByte(15)
+            .writeShort(40287)
+            .writeByte(4)
+            .writeByte(BigDecimal.valueOf(23).toInt())
+            .writerIndex(20)
+            .writeByte(6)
+
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
@@ -123,20 +127,23 @@ class TestHandler {
         assertEquals(15, streamAvail.streamId.streamType)
         assertEquals(40287, streamAvail.streamId.userId)
         assertEquals(4, streamAvail.streamId.subId)
+        assertEquals(BigDecimal.valueOf(23), streamAvail.nextSeq)
+        assertEquals(6, streamAvail.access)
     }
 
     @Test
     fun `sending OpenResponse`() {
-        val raw = byteArrayOf(
-            2, 6, //type,
-            0, 14, //length
-            5, 65, 0, 5, 15, -99, 95, 4, //stream_id: env_id(1), sess_num(3), stream_type, user_id(2), sub_id(1)
-            0, //status
-            2 //access
-        )
-
         val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeBytes(raw)
+        buffer.writeShortLE(518)
+            .writeShortLE(14)
+            .writeByte(5)
+            .writeMedium(4259845)
+            .writeByte(15)
+            .writeShort(40287)
+            .writeByte(4)
+            .writeByte(0)
+            .writeByte(2)
+
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
@@ -157,15 +164,16 @@ class TestHandler {
 
     @Test
     fun `sending CloseResponse`() {
-        val raw = byteArrayOf(
-            2, 8, //type,
-            0, 13, //length
-            5, 65, 0, 5, 15, -99, 95, 4, //stream_id: env_id(1), sess_num(3), stream_type, user_id(2), sub_id(1)
-            0
-        )
-
         val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeBytes(raw)
+        buffer.writeShortLE(520)
+            .writeShortLE(13)
+            .writeByte(5)
+            .writeMedium(4259845)
+            .writeByte(15)
+            .writeShort(40287)
+            .writeByte(4)
+            .writeByte(0)
+
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
@@ -185,17 +193,24 @@ class TestHandler {
 
     @Test
     fun `sending SeqMsg`() {
-        val raw = byteArrayOf(
-            9, 5, //type
-            0, 32, //length
-            5, 65, 0, 5, 13, -99, 95, 4, //stream_id: env_id(1), sess_num(3), stream_type, user_id(2), sub_id(1)
-            23, 0, 0, 0, 0, 0, 0, 0, //seq
-            0, 0, 0, 0, //reserved1
-            64, -59, -122, 125, 62, -96, -60, 22 //timestamp
-        )
+        val time = LocalDateTime.parse("2021-12-27T13:39:14.524104")
+        val seconds = time.toEpochSecond(ZoneOffset.UTC).toULong()
+        val nanoseconds = time.nano.toULong()
 
         val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeBytes(raw)
+        buffer.writeShortLE(2309)
+            .writeShortLE(32)
+            .writeByte(5)
+            .writeMedium(4259845)
+            .writeByte(13)
+            .writeShort(40287)
+            .writeByte(4)
+            .writeByte(BigDecimal.valueOf(23).toInt())
+            .writerIndex(20)
+            .writeMedium(0)
+            .writerIndex(24)
+            .writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
+
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
@@ -217,20 +232,15 @@ class TestHandler {
     fun `assembling Login`() {
         val settings = PillarHandlerSettings()
         val login = Login(settings).login()
-        val raw = byteArrayOf(
-            2, 1,   //type:513
-            0, 76,  //length:76
-            117, 115, 101, 114, 110, 97, 109, 101, 0, 0, 0, 0, 0, 0, 0, 0, //username
-            112, 97, 115, 115, 119, 111, 114, 100, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //password
-            109, 105, 99, 0, //mic
-            49, 46, 49, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0 // version
-        )
 
         assertEquals(76, login.writerIndex())
 
-        for (i in raw.indices)
-            assertEquals(raw[i], login.array()[i])
+        assertEquals(513, login.readUnsignedShortLE())
+        assertEquals(76, login.readUnsignedShortLE())
+        assertEquals("username", login.readCharSequence(16, StandardCharsets.US_ASCII).toString().trimEnd(0.toChar()))
+        assertEquals("password", login.readCharSequence(32, StandardCharsets.US_ASCII).toString().trimEnd(0.toChar()))
+        assertEquals("mic", login.readCharSequence(4, StandardCharsets.US_ASCII).toString().trimEnd(0.toChar()))
+        assertEquals("1.1", login.readCharSequence(20, StandardCharsets.US_ASCII).toString().trimEnd(0.toChar()))
     }
 
     @Test
@@ -242,55 +252,62 @@ class TestHandler {
         buffer.writeBytes(stream)
         val open = Open(StreamId(buffer), BigDecimal.valueOf(23)).open()
 
-        val raw = byteArrayOf(
-            2, 5,   //type:517,
-            0, 30,  //length:30
-            5, 65, 0, 5, 15, -99, 95, 4, //stream_id: env_id(1), sess_num(3), stream_type, user_id(2), sub_id(1)
-            23, 0, 0, 0, 0, 0, 0, 0, //start_seq
-            24, 0, 0, 0, 0, 0, 0, 0, //end_seq
-            2, //access
-            0, //mode
-        )
-
         assertEquals(30, open.writerIndex())
 
-        for (i in raw.indices)
-            assertEquals(raw[i], open.array()[i])
+        assertEquals(517, open.readUnsignedShortLE())
+        assertEquals(30, open.readUnsignedShortLE())
+        assertEquals(5, open.readUnsignedByte())
+        assertEquals(4259845, open.readMedium())
+        assertEquals(15, open.readByte())
+        assertEquals(40287, open.readUnsignedShort())
+        assertEquals(4, open.readByte().toInt())
+        open.readerIndex(12)
+        val bytes = ByteArray(8)
+        open.readBytes(bytes)
+        bytes.reverse()
+        assertEquals(BigDecimal.valueOf(23), BigInteger(1, bytes).toBigDecimal())
+        open.readerIndex(28)
+        assertEquals(2, open.readUnsignedByte())
+        open.readerIndex(29)
+        assertEquals(0, open.readUnsignedByte())
     }
 
     @Test
     fun `assembling SeqMsg`() {
-        val rawSend = byteArrayOf(
-            9, 5, //type
-            0, 32, //length
-            5, 65, 0, 5, 13, -99, 95, 4, //stream_id: env_id(1), sess_num(3), stream_type, user_id(2), sub_id(1)
-            23, 0, 0, 0, 0, 0, 0, 0, //seq
-            0, 0, 0, 0, //reserved1
-            64, -59, -122, 125, 62, -96, -60, 22 //timestamp
-        )
+        val time = LocalDateTime.parse("2021-12-27T13:39:14.524104")
+        val seconds = time.toEpochSecond(ZoneOffset.UTC).toULong()
+        val nanoseconds = time.nano.toULong()
+
         val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeBytes(rawSend)
+        buffer.writeShortLE(2309)
+            .writeShortLE(32)
+            .writeByte(5)
+            .writeMedium(4259845)
+            .writeByte(15)
+            .writeShort(40287)
+            .writeByte(4)
+            .writeByte(BigDecimal.valueOf(23).toInt())
+            .writerIndex(20)
+            .writeMedium(0)
+            .writerIndex(24)
+            .writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
+
         val seqMsg = SeqMsg(buffer)
-
         val seqMsgToSend = SeqMsgToSend(seqMsg).seqMsg()
-
-        val raw = byteArrayOf(
-            9, 5, //type
-            0, 32, //length
-            5, 65, 0, 5, 15, -99, 95, 4, //stream_id: env_id(1), sess_num(3), stream_type, user_id(2), sub_id(1)
-            23, 0, 0, 0, 0, 0, 0, 0, //seq
-            0, 0, 0, 0 //reserved1
-        )
 
         assertEquals(32, seqMsgToSend.writerIndex())
 
-        for (i in raw.indices)
-            assertEquals(raw[i], seqMsgToSend.array()[i])
+        assertEquals(2309, seqMsgToSend.readUnsignedShortLE())
+        assertEquals(32, seqMsgToSend.readUnsignedShortLE())
+        assertEquals(5, seqMsgToSend.readUnsignedByte())
+        assertEquals(4259845, seqMsgToSend.readMedium())
+        assertEquals(15, seqMsgToSend.readByte())
+        assertEquals(40287, seqMsgToSend.readUnsignedShort())
+        assertEquals(4, seqMsgToSend.readByte().toInt())
     }
 
     @Test
     fun `assembling Close`() {
-
         val stream = byteArrayOf(
             5, 65, 0, 5, 15, -99, 95, 4
         )
@@ -299,26 +316,22 @@ class TestHandler {
         val streamId = StreamIdEncode(StreamId(buffer))
         val close = Close(streamId.streamIdBuf).close()
 
-        val raw = byteArrayOf(
-            2, 7,
-            0, 12,
-            5, 65, 0, 5, 15, -99, 95, 4,
-        )
-
         assertEquals(12, close.writerIndex())
 
-        for (i in raw.indices)
-            assertEquals(raw[i], close.array()[i])
+        assertEquals(519, close.readUnsignedShortLE())
+        assertEquals(12, close.readUnsignedShortLE())
+        assertEquals(5, close.readUnsignedByte())
+        assertEquals(4259845, close.readMedium())
+        assertEquals(15, close.readByte())
+        assertEquals(40287, close.readUnsignedShort())
+        assertEquals(4, close.readByte().toInt())
     }
 
     @Test
     fun `invalid size message`() {
-        val raw = byteArrayOf(
-            9, 5, //type
-            0, 32, //length
-        )
         val buffer: ByteBuf = Unpooled.buffer(4)
-        buffer.writeBytes(raw)
+        buffer.writeShortLE(2309)
+            .writeByte(32)
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         assertNull(pillarHandler.onReceive(buffer))
@@ -334,11 +347,9 @@ class TestHandler {
 
     @Test
     fun `message size is less than 4`() {
-        val raw = byteArrayOf(
-            9, 5, 0
-        )
         val buffer: ByteBuf = Unpooled.buffer(3)
-        buffer.writeBytes(raw)
+        buffer.writeShortLE(514)
+            .writeByte(21)
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         assertNull(pillarHandler.onReceive(buffer))
@@ -346,11 +357,15 @@ class TestHandler {
 
     @Test
     fun `send onOutgoing`() {
-        val raw = byteArrayOf(
-            2, 2, 0, 21, 5, 65, 0, 5, 15, -99, 95, 4
-        )
         val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeBytes(raw)
+        buffer.writeShortLE(517)
+            .writeShortLE(21)
+            .writeByte(5)
+            .writeMedium(4259845)
+            .writeByte(15)
+            .writeShort(40287)
+            .writeByte(4)
+
         val pillarHandler = PillarHandler(context)
         val metadata = mutableMapOf<String, String>()
         metadata[TYPE_FIELD_NAME] = 517.toString()
@@ -365,12 +380,9 @@ class TestHandler {
 
     @Test
     fun `invalid type message`() {
-        val raw = byteArrayOf(
-            9, 9, //type
-            0, 32, //length
-        )
         val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeBytes(raw)
+        buffer.writeShortLE(500)
+            .writeShortLE(32)
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         assertNull(pillarHandler.onReceive(buffer))
@@ -385,14 +397,13 @@ class TestHandler {
 
     @Test
     fun `invalid status in LoginResponse`() {
-        val raw = byteArrayOf(
-            2, 2, //type,
-            0, 21, //length
-            117, 115, 101, 114, 110, 97, 109, 101, 0, 0, 0, 0, 0, 0, 0, 0, //username
-            85, //status
-        )
         val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeBytes(raw)
+        buffer.writeShortLE(514)
+            .writeShortLE(21)
+            .writeBytes("username".encodeToByteArray())
+            .writerIndex(20)
+            .writeByte(85)
+
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)

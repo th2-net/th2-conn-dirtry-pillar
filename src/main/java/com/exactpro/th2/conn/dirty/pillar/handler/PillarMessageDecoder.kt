@@ -30,8 +30,8 @@ class MsgHeader(byteBuf: ByteBuf) {
 
     init {
         byteBuf.readerIndex(0)
-        type = byteBuf.readShort().toInt()
-        length = byteBuf.readShort().toInt()
+        type = byteBuf.readUnsignedShortLE()
+        length = byteBuf.readUnsignedShortLE()
     }
 }
 
@@ -140,6 +140,7 @@ class SeqMsg(byteBuf: ByteBuf) {
     init {
         byteBuf.markReaderIndex()
         header = MsgHeader(byteBuf)
+
         byteBuf.readerIndex(4)
         streamId = StreamId(byteBuf)
 
@@ -158,7 +159,7 @@ class SeqMsg(byteBuf: ByteBuf) {
         val nanoseconds = time % 1_000_000_000UL
         timestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(milliseconds.toLong()), ZoneOffset.UTC).withNano(
             nanoseconds.toInt())
-
+        println(timestamp)
         require(byteBuf.readerIndex() == header.length){ "There are bytes left in buffer to read" }
     }
 }
