@@ -93,7 +93,10 @@ class TestHandler {
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
-        val loginResponseMsg = LoginResponse(message!!)
+        assertEquals(21, buffer.readerIndex())
+
+        pillarHandler.onIncoming(message!!)
+        val loginResponseMsg = LoginResponse(message)
 
         assertEquals(514, loginResponseMsg.header.type)
         assertEquals(21, loginResponseMsg.header.length)
@@ -118,6 +121,8 @@ class TestHandler {
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
+        assertEquals(21, buffer.readerIndex())
+
         val streamAvail = StreamAvail(message!!)
 
         assertEquals(515, streamAvail.header.type)
@@ -147,6 +152,8 @@ class TestHandler {
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
+        assertEquals(14, buffer.readerIndex())
+
         val metadata = pillarHandler.onIncoming(message!!)
         val openResponseMsg = OpenResponse(message)
 
@@ -177,6 +184,8 @@ class TestHandler {
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
+        assertEquals(13, buffer.readerIndex())
+
         val metadata = pillarHandler.onIncoming(message!!)
         val closeResponseMsg = CloseResponse(message)
 
@@ -214,6 +223,8 @@ class TestHandler {
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
+        assertEquals(32, buffer.readerIndex())
+
         val seqMsg = SeqMsg(message!!)
 
         assertEquals(2309, seqMsg.header.type)
@@ -335,6 +346,7 @@ class TestHandler {
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         assertNull(pillarHandler.onReceive(buffer))
+        assertEquals(0, buffer.readerIndex())
     }
 
     @Test
@@ -343,6 +355,7 @@ class TestHandler {
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         assertNull(pillarHandler.onReceive(buffer))
+        assertEquals(0, buffer.readerIndex())
     }
 
     @Test
@@ -353,6 +366,7 @@ class TestHandler {
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         assertNull(pillarHandler.onReceive(buffer))
+        assertEquals(0, buffer.readerIndex())
     }
 
     @Test
@@ -386,6 +400,7 @@ class TestHandler {
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         assertNull(pillarHandler.onReceive(buffer))
+        assertEquals(0, buffer.readerIndex())
     }
 
     @Test

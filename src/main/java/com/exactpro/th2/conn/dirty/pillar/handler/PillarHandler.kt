@@ -91,9 +91,11 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
         if(bufferLength > messageLength) {
             LOGGER.info { "Buffer length is longer than the declared one: $bufferLength -> $messageLength." }
-            return buffer.copy(0, messageLength)
+
+            return buffer.readSlice(messageLength)
         }
 
+        buffer.readerIndex(messageLength)
         return buffer
     }
 
@@ -107,12 +109,11 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
                 when (val status = Status.getStatus(loginResponse.status)) {
                     Status.OK -> {
-                        LOGGER.info("Login successful. Start sending heartbeats.")
+                        LOGGER.info { "Login successful. Start sending heartbeats." }
 
                         if (state.compareAndSet(
                                 State.SESSION_CREATED,
-                                State.LOGGED_IN
-                            )
+                                State.LOGGED_IN)
                         ){
                             LOGGER.info ("Setting a new state -> ${state.get()}.")
                             serverFuture = executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
@@ -120,9 +121,9 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                         else LOGGER.info { "Failed to set a new state. ${State.LOGGED_IN} -> ${state.get()}." }
                     }
                     Status.NOT_LOGGED_IN -> {
-                        if (state.compareAndSet(State.SESSION_CREATED, State.SESSION_CLOSE)) stopSendHeartBeats()
-                        else LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
-
+                        if (!state.compareAndSet(State.SESSION_CREATED, State.SESSION_CLOSE))
+                            LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
+                        stopSendHeartBeats()
                         LOGGER.info("Received `not logged in` status. Fall in to error state.")
                         sendClose()
                     }
@@ -199,6 +200,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     override fun onClose() {
+        sendClose()
         if (state.compareAndSet(state.get(), State.SESSION_CLOSE)) {
             state.getAndSet(State.SESSION_CLOSE)
             LOGGER.info { "Setting a new state -> ${state.get()}." }
