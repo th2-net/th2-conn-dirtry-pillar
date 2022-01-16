@@ -230,7 +230,6 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
     private fun startSendHeartBeats() {
         channel.send(Heartbeat().heartbeat, messageMetadata(MessageType.HEARTBEAT), IChannel.SendMode.MANGLE)
-        LOGGER.info { "Message has been sent to server - Heartbeat." }
         clientFuture = executor.schedule(this::startSendHeartBeats, settings.heartbeatInterval, TimeUnit.MILLISECONDS)
     }
 
