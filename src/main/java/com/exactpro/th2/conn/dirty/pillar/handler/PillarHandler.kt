@@ -245,6 +245,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             LOGGER.info { "Setting a new state -> ${state.get()}." }
             channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
             LOGGER.info { "Message has been sent to server - Login." }
+            serverFuture?.cancel(false)
         } else LOGGER.info { "Failed to set a new state ${State.SESSION_CREATED}." }
     }
 
