@@ -243,7 +243,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     private fun receivedHeartBeats() {
-        if (state.compareAndSet(State.LOGGED_IN, State.NOT_HEARTBEAT)) {
+        if (state.compareAndSet(state.get(), State.NOT_HEARTBEAT)) {
             LOGGER.error { "Server stopped sending heartbeat." }
             LOGGER.info { "Setting a new state -> ${state.get()}." }
             reconnect()
