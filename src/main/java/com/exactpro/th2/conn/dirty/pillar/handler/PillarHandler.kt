@@ -101,7 +101,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
     override fun onIncoming(message: ByteBuf): Map<String, String> {
         val msgHeader = MsgHeader(message)
-
+        message.readerIndex(4)
+        
         when (val msgType = msgHeader.type) {
             MessageType.LOGIN_RESPONSE.type -> {
                 LOGGER.info { "Type message - LoginResponse." }
