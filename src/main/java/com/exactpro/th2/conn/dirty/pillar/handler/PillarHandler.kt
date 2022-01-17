@@ -91,18 +91,16 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
         if(bufferLength > messageLength) {
             LOGGER.info { "Buffer length is longer than the declared one: $bufferLength -> $messageLength." }
-
             return buffer.readSlice(messageLength)
         }
 
-        buffer.readerIndex(messageLength)
-        return buffer
+        buffer.readerIndex(bufferLength)
+        return buffer.copy(buffer.readerIndex() - messageLength, messageLength)
     }
 
     override fun onIncoming(message: ByteBuf): Map<String, String> {
         val msgHeader = MsgHeader(message)
         message.readerIndex(4)
-        
         when (val msgType = msgHeader.type) {
             MessageType.LOGIN_RESPONSE.type -> {
                 LOGGER.info { "Type message - LoginResponse." }
