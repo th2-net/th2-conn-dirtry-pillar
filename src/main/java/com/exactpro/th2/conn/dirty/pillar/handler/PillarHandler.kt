@@ -215,8 +215,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     private fun sendClose() {
-        if (state.compareAndSet(state.get(), State.LOGGED_OUT)) {
-            state.getAndSet(State.LOGGED_OUT)
+        if (state.compareAndSet(state.get(), State.SESSION_CLOSE)) {
+            state.getAndSet(State.SESSION_CLOSE)
             LOGGER.info { "Setting a new state -> ${state.get()}." }
             channel.send(
                 Close(streamId.streamIdBuf).close(),
