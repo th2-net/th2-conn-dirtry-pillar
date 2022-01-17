@@ -165,7 +165,7 @@ class Close(private  val streamId: ByteBuf) {
         closeMessage.writeShortLE(type)
         closeMessage.writeShortLE(length)
         closeMessage.writeBytes(streamId)
-
+        closeMessage.writerIndex(length)
         require (closeMessage.writerIndex() == length){ "Message size exceeded." }
         return closeMessage
     }
