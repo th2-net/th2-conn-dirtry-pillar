@@ -138,6 +138,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                 serverFuture = executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
 
                 val streamAvail = StreamAvail(message)
+                message.readerIndex(4)
                 streamId = StreamIdEncode(StreamId(message))
                 val open = Open(
                     streamId.streamId,

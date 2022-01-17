@@ -95,11 +95,12 @@ class TestHandler {
         val message = pillarHandler.onReceive(buffer)
         assertEquals(21, buffer.readerIndex())
 
-        pillarHandler.onIncoming(message!!)
+        val metadata = pillarHandler.onIncoming(message!!)
+        message.readerIndex(4)
         val loginResponseMsg = LoginResponse(message)
 
-        assertEquals(514, loginResponseMsg.header.type)
-        assertEquals(21, loginResponseMsg.header.length)
+        assertEquals(514, metadata[TYPE_FIELD_NAME]!!.toInt())
+        assertEquals(21, metadata[LENGTH_FIELD_NAME]!!.toInt())
         assertEquals("username", loginResponseMsg.username)
         assertEquals(0, loginResponseMsg.status)
     }
@@ -122,11 +123,8 @@ class TestHandler {
         pillarHandler.channel = channel
         val message = pillarHandler.onReceive(buffer)
         assertEquals(21, buffer.readerIndex())
-
-        val streamAvail = StreamAvail(message!!)
-
-        assertEquals(515, streamAvail.header.type)
-        assertEquals(21, streamAvail.header.length)
+        buffer.readerIndex(4)
+        val streamAvail = StreamAvail(buffer)
         assertEquals(5, streamAvail.streamId.envId)
         assertEquals(4259845, streamAvail.streamId.sessNum)
         assertEquals(15, streamAvail.streamId.streamType)
@@ -155,6 +153,7 @@ class TestHandler {
         assertEquals(14, buffer.readerIndex())
 
         val metadata = pillarHandler.onIncoming(message!!)
+        message.readerIndex(4)
         val openResponseMsg = OpenResponse(message)
 
         assertEquals(518.toString(), metadata[TYPE_FIELD_NAME])
@@ -187,6 +186,7 @@ class TestHandler {
         assertEquals(13, buffer.readerIndex())
 
         val metadata = pillarHandler.onIncoming(message!!)
+        message.readerIndex(4)
         val closeResponseMsg = CloseResponse(message)
 
         assertEquals(520.toString(), metadata[TYPE_FIELD_NAME])
@@ -225,10 +225,9 @@ class TestHandler {
         val message = pillarHandler.onReceive(buffer)
         assertEquals(32, buffer.readerIndex())
 
-        val seqMsg = SeqMsg(message!!)
+        buffer.readerIndex(4)
+        val seqMsg = SeqMsg(buffer)
 
-        assertEquals(2309, seqMsg.header.type)
-        assertEquals(32, seqMsg.header.length)
         assertEquals(5, seqMsg.streamId.envId)
         assertEquals(4259845, seqMsg.streamId.sessNum)
         assertEquals(13, seqMsg.streamId.streamType)
@@ -303,6 +302,7 @@ class TestHandler {
             .writerIndex(24)
             .writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
 
+        buffer.readerIndex(4)
         val seqMsg = SeqMsg(buffer)
         val seqMsgToSend = SeqMsgToSend(seqMsg).seqMsg()
 

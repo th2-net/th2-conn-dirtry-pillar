@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.conn.dirty.pillar.handler
 
+import com.exactpro.th2.conn.dirty.pillar.handler.util.MessageType
 import io.netty.buffer.ByteBuf
 import java.math.BigDecimal
 import java.math.BigInteger
@@ -52,32 +53,25 @@ class StreamId(byteBuf: ByteBuf){
 }
 
 class LoginResponse(byteBuf: ByteBuf) {
-    val header: MsgHeader
     val username: String
     val status: Short
 
     init {
         byteBuf.markReaderIndex()
-        header = MsgHeader(byteBuf)
-        byteBuf.readerIndex(4)
         username = byteBuf.readCharSequence(16, StandardCharsets.US_ASCII).toString().trimEnd(0.toChar())
         byteBuf.readerIndex(20)
         status = byteBuf.readUnsignedByte()
-
-        require(byteBuf.readerIndex() == header.length){ "There are bytes left in buffer to read" }
+        require(byteBuf.readerIndex() == MessageType.LOGIN_RESPONSE.length){ "There are bytes left in buffer to read" }
     }
 }
 
 class StreamAvail(byteBuf: ByteBuf) {
-    val header: MsgHeader
     val streamId: StreamId
     val nextSeq: BigDecimal
     val access: Short
 
     init {
         byteBuf.markReaderIndex()
-        header = MsgHeader(byteBuf)
-        byteBuf.readerIndex(4)
         streamId = StreamId(byteBuf)
 
         byteBuf.readerIndex(12)
@@ -89,49 +83,42 @@ class StreamAvail(byteBuf: ByteBuf) {
         byteBuf.readerIndex(20)
         access = byteBuf.readUnsignedByte()
 
-        require(byteBuf.readerIndex() == header.length){ "There are bytes left in buffer to read" }
+        require(byteBuf.readerIndex() == MessageType.STREAM_AVAIL.length){ "There are bytes left in buffer to read" }
     }
 }
 
 class OpenResponse(byteBuf: ByteBuf) {
-    val header: MsgHeader
     val streamId: StreamId
     val status: Short
     val access: Short
 
     init {
         byteBuf.markReaderIndex()
-        header = MsgHeader(byteBuf)
-        byteBuf.readerIndex(4)
         streamId = StreamId(byteBuf)
         byteBuf.readerIndex(12)
         status = byteBuf.readUnsignedByte()
         byteBuf.readerIndex(13)
         access = byteBuf.readUnsignedByte()
 
-        require(byteBuf.readerIndex() == header.length){ "There are bytes left in buffer to read" }
+        require(byteBuf.readerIndex() == MessageType.OPEN_RESPONSE.length){ "There are bytes left in buffer to read" }
     }
 }
 
 class CloseResponse(byteBuf: ByteBuf){
-    val header: MsgHeader
     val streamId: StreamId
     val status: Short
 
     init {
         byteBuf.markReaderIndex()
-        header = MsgHeader(byteBuf)
-        byteBuf.readerIndex(4)
         streamId = StreamId(byteBuf)
         byteBuf.readerIndex(12)
         status = byteBuf.readUnsignedByte()
 
-        require(byteBuf.readerIndex() == header.length){ "There are bytes left in buffer to read" }
+        require(byteBuf.readerIndex() == MessageType.CLOSE_RESPONSE.length){ "There are bytes left in buffer to read" }
     }
 }
 
 class SeqMsg(byteBuf: ByteBuf) {
-    val header: MsgHeader
     val streamId: StreamId
     val seq: BigDecimal
     val reserved1: Int
@@ -139,9 +126,6 @@ class SeqMsg(byteBuf: ByteBuf) {
 
     init {
         byteBuf.markReaderIndex()
-        header = MsgHeader(byteBuf)
-
-        byteBuf.readerIndex(4)
         streamId = StreamId(byteBuf)
 
         byteBuf.readerIndex(12)
@@ -159,7 +143,7 @@ class SeqMsg(byteBuf: ByteBuf) {
         val nanoseconds = time % 1_000_000_000UL
         timestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(milliseconds.toLong()), ZoneOffset.UTC).withNano(
             nanoseconds.toInt())
-        require(byteBuf.readerIndex() == header.length){ "There are bytes left in buffer to read" }
+        require(byteBuf.readerIndex() == MessageType.SEQMSG.length){ "There are bytes left in buffer to read" }
     }
 }
 
