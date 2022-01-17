@@ -88,7 +88,6 @@ class TestHandler {
             .writeBytes("username".encodeToByteArray())
             .writerIndex(20)
             .writeByte(0)
-            .writeShortLE(514)
 
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
@@ -103,6 +102,31 @@ class TestHandler {
         assertEquals(21, metadata[LENGTH_FIELD_NAME]!!.toInt())
         assertEquals("username", loginResponseMsg.username)
         assertEquals(0, loginResponseMsg.status)
+
+        buffer.writeShortLE(515)
+            .writeShortLE(21)
+            .writeByte(5)
+            .writeMedium(4259845)
+            .writeByte(15)
+            .writeShort(40287)
+            .writeByte(4)
+            .writeByte(BigDecimal.valueOf(23).toInt())
+            .writerIndex(41)
+            .writeByte(6)
+
+        val message2 = pillarHandler.onReceive(buffer)
+        assertEquals(42, buffer.readerIndex())
+
+        val copyBuf = buffer.copy(21, 21)
+        copyBuf.readerIndex(4)
+        val streamAvail = StreamAvail(copyBuf)
+        assertEquals(5, streamAvail.streamId.envId)
+        assertEquals(4259845, streamAvail.streamId.sessNum)
+        assertEquals(15, streamAvail.streamId.streamType)
+        assertEquals(40287, streamAvail.streamId.userId)
+        assertEquals(4, streamAvail.streamId.subId)
+        assertEquals(BigDecimal.valueOf(23), streamAvail.nextSeq)
+        assertEquals(6, streamAvail.access)
     }
 
     @Test

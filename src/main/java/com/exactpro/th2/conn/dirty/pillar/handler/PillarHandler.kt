@@ -94,7 +94,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             return buffer.readSlice(messageLength)
         }
 
-        buffer.readerIndex(bufferLength)
+        buffer.readerIndex(buffer.writerIndex())
         return buffer.copy(buffer.readerIndex() - messageLength, messageLength)
     }
 
