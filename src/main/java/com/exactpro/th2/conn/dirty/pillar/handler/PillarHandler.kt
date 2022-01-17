@@ -98,8 +98,9 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     override fun onIncoming(message: ByteBuf): Map<String, String> {
+
         val msgHeader = MsgHeader(message)
-        message.readerIndex(4)
+
         when (val msgType = msgHeader.type) {
             MessageType.LOGIN_RESPONSE.type -> {
                 LOGGER.info { "Type message - LoginResponse." }
@@ -111,12 +112,16 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
                         if (state.compareAndSet(
                                 State.SESSION_CREATED,
-                                State.LOGGED_IN)
-                        ){
-                            LOGGER.info ("Setting a new state -> ${state.get()}.")
-                            serverFuture = executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
-                        }
-                        else LOGGER.info { "Failed to set a new state. ${State.LOGGED_IN} -> ${state.get()}." }
+                                State.LOGGED_IN
+                            )
+                        ) {
+                            LOGGER.info("Setting a new state -> ${state.get()}.")
+                            serverFuture = executor.schedule(
+                                this::receivedHeartBeats,
+                                settings.streamAvailInterval,
+                                TimeUnit.MILLISECONDS
+                            )
+                        } else LOGGER.info { "Failed to set a new state. ${State.LOGGED_IN} -> ${state.get()}." }
                     }
                     Status.NOT_LOGGED_IN -> {
                         if (!state.compareAndSet(State.SESSION_CREATED, State.SESSION_CLOSE))
@@ -133,7 +138,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             MessageType.STREAM_AVAIL.type -> {
                 LOGGER.info { "Type message - StreamAvail." }
 
-                serverFuture = executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
+                serverFuture =
+                    executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
 
                 val streamAvail = StreamAvail(message)
                 message.readerIndex(4)

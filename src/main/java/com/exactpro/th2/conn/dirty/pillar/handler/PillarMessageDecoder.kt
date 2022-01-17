@@ -18,6 +18,8 @@ package com.exactpro.th2.conn.dirty.pillar.handler
 
 import com.exactpro.th2.conn.dirty.pillar.handler.util.MessageType
 import io.netty.buffer.ByteBuf
+import io.netty.buffer.ByteBufUtil
+import java.lang.Exception
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.nio.charset.StandardCharsets
@@ -30,9 +32,14 @@ class MsgHeader(byteBuf: ByteBuf) {
     val length: Int
 
     init {
-        byteBuf.readerIndex(0)
-        type = byteBuf.readUnsignedShortLE()
-        length = byteBuf.readUnsignedShortLE()
+        try {
+            byteBuf.readerIndex(0)
+            type = byteBuf.readUnsignedShortLE()
+            length = byteBuf.readUnsignedShortLE()
+        }
+        catch (e: Exception){
+            throw Exception ("Unable to read header in message: ${ByteBufUtil.hexDump(byteBuf)}", e)
+        }
     }
 }
 
