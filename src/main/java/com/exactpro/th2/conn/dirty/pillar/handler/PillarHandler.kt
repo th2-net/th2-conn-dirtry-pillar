@@ -36,7 +36,6 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     private val executor = Executors.newSingleThreadScheduledExecutor()
     private var clientFuture: Future<*>? = CompletableFuture.completedFuture(null)
     private var serverFuture: Future<*>? = CompletableFuture.completedFuture(null)
-    private var reconnectFuture: Future<*>? = CompletableFuture.completedFuture(null)
     private lateinit var streamId: StreamIdEncode
     private var settings: PillarHandlerSettings
     lateinit var channel: IChannel
@@ -201,11 +200,10 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
     override fun onClose() {
         sendClose()
-        if (state.compareAndSet(state.get(), State.SESSION_CLOSE)) {
-            state.getAndSet(State.SESSION_CLOSE)
+        if (state.compareAndSet(State.LOGGED_OUT, State.SESSION_CLOSE)) {
             LOGGER.info { "Setting a new state -> ${state.get()}." }
             LOGGER.info { "Handler is disconnected." }
-        } else LOGGER.info { "Failed to set a new state." }
+        } else LOGGER.info { "Failed to set a new state ${State.SESSION_CLOSE}." }
     }
 
     override fun close() {
@@ -214,18 +212,16 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     private fun sendClose() {
-        if (state.compareAndSet(state.get(), State.SESSION_CLOSE)) {
-            state.getAndSet(State.SESSION_CLOSE)
+        if (state.compareAndSet(State.LOGGED_IN, State.LOGGED_OUT)) {
+            state.getAndSet(State.LOGGED_OUT)
             LOGGER.info { "Setting a new state -> ${state.get()}." }
             channel.send(
                 Close(streamId.streamIdBuf).close(),
                 messageMetadata(MessageType.CLOSE),
                 IChannel.SendMode.MANGLE
             )
-            reconnectFuture =
-                executor.schedule(this::reconnect, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
             LOGGER.info { "Message has been sent to server - Close." }
-        } else LOGGER.info { "Failed to set a new state." }
+        } else LOGGER.info { "Failed to set a new state ${State.LOGGED_OUT}." }
     }
 
     private fun startSendHeartBeats() {
@@ -238,23 +234,20 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     private fun reconnect() {
-        LOGGER.info { "Reconnect." }
-        if (state.compareAndSet(state.get(), State.SESSION_CREATED)) {
-            state.getAndSet(State.SESSION_CREATED)
+        LOGGER.info { "Reconnect to server." }
+        if (state.compareAndSet(State.NOT_HEARTBEAT, State.SESSION_CREATED)) {
             LOGGER.info { "Setting a new state -> ${state.get()}." }
-
             channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
             LOGGER.info { "Message has been sent to server - Login." }
-        } else LOGGER.info { "Failed to set a new state SESSION_CREATED." }
+        } else LOGGER.info { "Failed to set a new state ${State.SESSION_CREATED}." }
     }
 
     private fun receivedHeartBeats() {
-        if (state.compareAndSet(state.get(), State.NOT_HEARTBEAT)) {
+        if (state.compareAndSet(State.LOGGED_IN, State.NOT_HEARTBEAT)) {
             LOGGER.error { "Server stopped sending heartbeat." }
-            state.getAndSet(State.NOT_HEARTBEAT)
             LOGGER.info { "Setting a new state -> ${state.get()}." }
-            sendClose()
-        } else LOGGER.info { "Failed to set a new state NOT_HEARTBEAT." }
+            reconnect()
+        } else LOGGER.info { "Failed to set a new state ${State.NOT_HEARTBEAT}." }
     }
 
     private fun messageMetadata(messageType: MessageType): Map<String, String>{
