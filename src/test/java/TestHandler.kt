@@ -81,7 +81,7 @@ class TestHandler {
     private var settings = PillarHandlerSettings()
 
     @Test
-    fun `sending LoginResponse with extra bytes`() {
+    fun `sending LoginResponse`() {
         val buffer: ByteBuf = Unpooled.buffer()
         buffer.writeShortLE(514)
             .writeShortLE(21)
@@ -114,12 +114,38 @@ class TestHandler {
             .writerIndex(41)
             .writeByte(6)
 
-        val message2 = pillarHandler.onReceive(buffer)
+        pillarHandler.onReceive(buffer)
         assertEquals(42, buffer.readerIndex())
 
-        val copyBuf = buffer.copy(21, 21)
+        var copyBuf = buffer.copy(21, 21)
         copyBuf.readerIndex(4)
-        val streamAvail = StreamAvail(copyBuf)
+        var streamAvail = StreamAvail(copyBuf)
+        assertEquals(5, streamAvail.streamId.envId)
+        assertEquals(4259845, streamAvail.streamId.sessNum)
+        assertEquals(15, streamAvail.streamId.streamType)
+        assertEquals(40287, streamAvail.streamId.userId)
+        assertEquals(4, streamAvail.streamId.subId)
+        assertEquals(BigDecimal.valueOf(23), streamAvail.nextSeq)
+        assertEquals(6, streamAvail.access)
+
+
+        buffer.writeShortLE(515)
+            .writeShortLE(21)
+            .writeByte(5)
+            .writeMedium(4259845)
+            .writeByte(15)
+            .writeShort(40287)
+            .writeByte(4)
+            .writeByte(BigDecimal.valueOf(23).toInt())
+            .writerIndex(62)
+            .writeByte(6)
+
+        pillarHandler.onReceive(buffer)
+        assertEquals(63, buffer.readerIndex())
+
+        copyBuf = buffer.copy(42, 21)
+        copyBuf.readerIndex(4)
+        streamAvail = StreamAvail(copyBuf)
         assertEquals(5, streamAvail.streamId.envId)
         assertEquals(4259845, streamAvail.streamId.sessNum)
         assertEquals(15, streamAvail.streamId.streamType)
@@ -145,7 +171,7 @@ class TestHandler {
 
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
-        val message = pillarHandler.onReceive(buffer)
+        pillarHandler.onReceive(buffer)
         assertEquals(21, buffer.readerIndex())
         buffer.readerIndex(4)
         val streamAvail = StreamAvail(buffer)
@@ -176,12 +202,8 @@ class TestHandler {
         val message = pillarHandler.onReceive(buffer)
         assertEquals(14, buffer.readerIndex())
 
-        val metadata = pillarHandler.onIncoming(message!!)
-        message.readerIndex(4)
+        message!!.readerIndex(4)
         val openResponseMsg = OpenResponse(message)
-
-        assertEquals(518.toString(), metadata[TYPE_FIELD_NAME])
-        assertEquals(14.toString(), metadata[LENGTH_FIELD_NAME])
 
         assertEquals(5, openResponseMsg.streamId.envId)
         assertEquals(4259845, openResponseMsg.streamId.sessNum)
@@ -246,7 +268,7 @@ class TestHandler {
 
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
-        val message = pillarHandler.onReceive(buffer)
+        pillarHandler.onReceive(buffer)
         assertEquals(32, buffer.readerIndex())
 
         buffer.readerIndex(4)
@@ -284,7 +306,7 @@ class TestHandler {
         )
         val buffer: ByteBuf = Unpooled.buffer()
         buffer.writeBytes(stream)
-        val open = Open(StreamId(buffer), BigDecimal.valueOf(23)).open()
+        val open = Open(StreamId(buffer), BigDecimal.valueOf(23), 9999).open()
 
         assertEquals(30, open.writerIndex())
 

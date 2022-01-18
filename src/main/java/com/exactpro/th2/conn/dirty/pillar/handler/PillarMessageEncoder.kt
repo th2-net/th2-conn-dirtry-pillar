@@ -93,7 +93,8 @@ class Login(settings: PillarHandlerSettings) {
 }
 
 class Open(private val streamId: StreamId,
-           private val startSeq: BigDecimal){
+           private val startSeq: BigDecimal,
+           private val endSeq: Int){
     private val type: Int = MessageType.OPEN.type
     private val length: Int = MessageType.OPEN.length
 
@@ -110,7 +111,7 @@ class Open(private val streamId: StreamId,
         openMessage.writerIndex(12)
         openMessage.writeLongLE(startSeq.toLong())
         openMessage.writerIndex(20)
-        openMessage.writeLongLE(startSeq.toLong()+1) //TODO
+        openMessage.writeLongLE(endSeq.toLong()) //TODO
 
         openMessage.writerIndex(28)
         if (streamId.streamType == StreamType.REF.value || streamId.streamType == StreamType.GT.value)

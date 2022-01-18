@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicReference
 class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IProtocolHandler {
 
     private var state = AtomicReference(State.SESSION_CLOSE)
-    private val executor = Executors.newSingleThreadScheduledExecutor()
+    private val executor = Executors.newScheduledThreadPool(1)
     private var clientFuture: Future<*>? = CompletableFuture.completedFuture(null)
     private var serverFuture: Future<*>? = CompletableFuture.completedFuture(null)
     private lateinit var streamId: StreamIdEncode
@@ -137,15 +137,19 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             MessageType.STREAM_AVAIL.type -> {
                 LOGGER.info { "Type message - StreamAvail." }
 
+                executor.awaitTermination(0,TimeUnit.MILLISECONDS)
                 serverFuture =
                     executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
 
                 val streamAvail = StreamAvail(message)
                 message.readerIndex(4)
                 streamId = StreamIdEncode(StreamId(message))
+
+                val endSeq = 99999
                 val open = Open(
                     streamId.streamId,
-                    streamAvail.nextSeq
+                    streamAvail.nextSeq,
+                    endSeq
                 )
 
                 channel.send(
@@ -162,7 +166,15 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                 val openResponse = OpenResponse(message)
 
                 when (Status.getStatus(openResponse.status)) {
-                    Status.OK -> LOGGER.info("Open successful.")
+                    Status.OK -> {
+                        LOGGER.info("Open successful.")
+                        channel.send(
+                            Close(streamId.streamIdBuf).close(),
+                            messageMetadata(MessageType.CLOSE),
+                            IChannel.SendMode.MANGLE
+                        )
+                        LOGGER.info { "Message has been sent to server - Close." }
+                    }
                     Status.NO_STREAM_PERMISSION -> LOGGER.warn { "No stream permission." }
                     else -> error("This is not an OpenResponse status.")
                 }
@@ -220,12 +232,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
         if (state.compareAndSet(State.LOGGED_IN, State.LOGGED_OUT)) {
             state.getAndSet(State.LOGGED_OUT)
             LOGGER.info { "Setting a new state -> ${state.get()}." }
-            channel.send(
-                Close(streamId.streamIdBuf).close(),
-                messageMetadata(MessageType.CLOSE),
-                IChannel.SendMode.MANGLE
-            )
-            LOGGER.info { "Message has been sent to server - Close." }
+
         } else LOGGER.info { "Failed to set a new state ${State.LOGGED_OUT}." }
     }
 
@@ -247,6 +254,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     private fun receivedHeartBeats() {
+        serverFuture?.cancel(true)
         if (state.compareAndSet(state.get(), State.NOT_HEARTBEAT)) {
             LOGGER.warn { "Server stopped sending heartbeat." }
             LOGGER.info { "Setting a new state -> ${state.get()}." }
