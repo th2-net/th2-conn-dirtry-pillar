@@ -53,8 +53,11 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             channel = context.channel
             channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
             LOGGER.info { "Message has been sent to server - Login." }
+            serverFuture =
+                executor.schedule(this::reconnect, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
 
-            startSendHeartBeats()
+            clientFuture = executor.scheduleWithFixedDelay(this::startSendHeartBeats, settings.heartbeatInterval, settings.heartbeatInterval, TimeUnit.MILLISECONDS)
+            LOGGER.info { "Message has been sent to server - HeartBeats." }
 
             LOGGER.info { "Handler is connected." }
         } else LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
@@ -98,7 +101,6 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     override fun onIncoming(message: ByteBuf): Map<String, String> {
-
         val msgHeader = MsgHeader(message)
 
         when (val msgType = msgHeader.type) {
@@ -116,11 +118,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                             )
                         ) {
                             LOGGER.info("Setting a new state -> ${state.get()}.")
-                            serverFuture = executor.schedule(
-                                this::receivedHeartBeats,
-                                settings.streamAvailInterval,
-                                TimeUnit.MILLISECONDS
-                            )
+                            serverFuture =
+                                executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
                         } else LOGGER.info { "Failed to set a new state. ${State.LOGGED_IN} -> ${state.get()}." }
                     }
                     Status.NOT_LOGGED_IN -> {
@@ -214,7 +213,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
     override fun close() {
         executor.shutdown()
-        if (!executor.awaitTermination(5000, TimeUnit.MILLISECONDS)) executor.shutdownNow()
+        if (!executor.awaitTermination(3000, TimeUnit.MILLISECONDS)) executor.shutdownNow()
     }
 
     private fun sendClose() {
@@ -232,7 +231,6 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
     private fun startSendHeartBeats() {
         channel.send(Heartbeat().heartbeat, messageMetadata(MessageType.HEARTBEAT), IChannel.SendMode.MANGLE)
-        clientFuture = executor.schedule(this::startSendHeartBeats, settings.heartbeatInterval, TimeUnit.MILLISECONDS)
     }
 
     private fun stopSendHeartBeats() {
@@ -245,13 +243,12 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             LOGGER.info { "Setting a new state -> ${state.get()}." }
             channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
             LOGGER.info { "Message has been sent to server - Login." }
-            serverFuture?.cancel(false)
         } else LOGGER.info { "Failed to set a new state ${State.SESSION_CREATED}." }
     }
 
     private fun receivedHeartBeats() {
         if (state.compareAndSet(state.get(), State.NOT_HEARTBEAT)) {
-            LOGGER.error { "Server stopped sending heartbeat." }
+            LOGGER.warn { "Server stopped sending heartbeat." }
             LOGGER.info { "Setting a new state -> ${state.get()}." }
             reconnect()
         } else LOGGER.info { "Failed to set a new state ${State.NOT_HEARTBEAT}." }
