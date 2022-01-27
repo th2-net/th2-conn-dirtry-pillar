@@ -20,8 +20,9 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerFactory
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings
-import com.exactpro.th2.conn.dirty.tcp.core.api.impl.Channel
+import com.google.auto.service.AutoService
 
+@AutoService(IProtocolHandlerFactory::class)
 class PillarHandlerFactory: IProtocolHandlerFactory {
     override val name: String = PillarHandlerFactory::class.java.name
 

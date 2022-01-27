@@ -29,7 +29,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import com.google.auto.service.AutoService
 
+@AutoService(PillarHandler::class)
 class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IProtocolHandler {
 
     private var state = AtomicReference(State.SESSION_CLOSE)
