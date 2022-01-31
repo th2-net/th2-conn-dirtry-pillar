@@ -45,6 +45,7 @@ import java.nio.charset.StandardCharsets
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.concurrent.Executor
+import java.util.concurrent.ScheduledExecutorService
 
 class TestHandler {
     private val address: InetSocketAddress = mock(InetSocketAddress::class.java)
@@ -56,7 +57,7 @@ class TestHandler {
     private val onEvent: (event: Event, parentEventId: EventID) -> Unit = mock {}
     private val onMessage: (RawMessage) -> Unit = mock { }
     private val eventLoopGroup: EventLoopGroup = NioEventLoopGroup()
-    private val executor: Executor = mock(Executor::class.java)
+    private val executor: ScheduledExecutorService = mock(ScheduledExecutorService::class.java)
     private val sequencePool = TaskSequencePool(executor)
     private val parentEventId = EventID.newBuilder().setId("root").build()!!
 
@@ -69,6 +70,7 @@ class TestHandler {
         mangler,
         onEvent,
         onMessage,
+        executor,
         eventLoopGroup,
         sequencePool,
         parentEventId
