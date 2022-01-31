@@ -27,9 +27,6 @@ apply plugin: 'kotlin-kapt'
 group 'com.exactpro.th2'
 version release_version
 
-sourceCompatibility = 11
-targetCompatibility = 11
-
 repositories {
     mavenCentral()
 
@@ -52,7 +49,7 @@ repositories {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:3.0.0')
+    api platform('com.exactpro.th2:bom:3.1.0')
     implementation 'com.google.auto.service:auto-service:1.0.1'
 
     implementation 'com.exactpro.th2:common:3.32.0'
@@ -68,6 +65,9 @@ dependencies {
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
+
+    annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
+    kapt 'com.google.auto.service:auto-service:1.0.1'
 }
 
 test {

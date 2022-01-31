@@ -93,7 +93,7 @@ class Login(settings: PillarHandlerSettings) {
 }
 
 class Open(private val streamId: StreamId,
-           private val startSeq: BigDecimal,
+           private val startSeq: Int,
            private val endSeq: Int){
     private val type: Int = MessageType.OPEN.type
     private val length: Int = MessageType.OPEN.length
@@ -126,7 +126,8 @@ class Open(private val streamId: StreamId,
     }
 }
 
-class SeqMsgToSend(private val seqmsg: SeqMsg){
+class SeqMsgToSend(private val num: Int,
+                   private val streamId: StreamId) {
     private val type: Int = MessageType.SEQMSG.type
     private val length: Int = MessageType.SEQMSG.length
 
@@ -138,12 +139,16 @@ class SeqMsgToSend(private val seqmsg: SeqMsg){
         seqMsgMessage.writeShortLE(length)
 
         seqMsgMessage.writerIndex(4)
-        seqmsg.streamId.streamType = StreamType.TG.value
-        seqMsgMessage.writeBytes(StreamIdEncode(seqmsg.streamId).streamIdBuf)
+        seqMsgMessage.writeByte(streamId.envId.toInt())
+        seqMsgMessage.writeMedium(streamId.sessNum)
+        seqMsgMessage.writeByte(streamId.streamType.toInt())
+        seqMsgMessage.writeShort(streamId.userId)
+        seqMsgMessage.writeByte(streamId.subId)
+
         seqMsgMessage.writerIndex(12)
-        seqMsgMessage.writeByte(seqmsg.seq.toInt())
+        seqMsgMessage.writeByte(num)
         seqMsgMessage.writerIndex(20)
-        seqMsgMessage.writeInt(seqmsg.reserved1)
+        seqMsgMessage.writeInt(0)//TODO
 
         seqMsgMessage.writerIndex(24)
         val time = LocalDateTime.now()
@@ -151,7 +156,7 @@ class SeqMsgToSend(private val seqmsg: SeqMsg){
         val nanoseconds = time.nano.toULong()
         seqMsgMessage.writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
 
-        require (seqMsgMessage.writerIndex() == length){ "Message size exceeded." }
+        require(seqMsgMessage.writerIndex() == length) { "Message size exceeded." }
         return seqMsgMessage
     }
 }

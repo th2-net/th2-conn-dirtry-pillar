@@ -29,9 +29,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
-import com.google.auto.service.AutoService
-
-@AutoService(PillarHandler::class)
 class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IProtocolHandler {
 
     private var state = AtomicReference(State.SESSION_CLOSE)
@@ -41,6 +38,12 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     private lateinit var streamId: StreamIdEncode
     private var settings: PillarHandlerSettings
     lateinit var channel: IChannel
+    private var startRead = AtomicReference(0)
+    private var endRead = AtomicReference(0)
+    private var startWrite = AtomicReference(0)
+    private var endWrite = AtomicReference(0)
+    private var readingConnection = AtomicReference(false)
+    private var writingConnection = AtomicReference(false)
 
     init{
         settings = context.settings as PillarHandlerSettings
@@ -55,9 +58,11 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             channel = context.channel
             channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
             LOGGER.info { "Message has been sent to server - Login." }
+            serverFuture?.cancel(false)
             serverFuture =
                 executor.schedule(this::reconnect, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
 
+            clientFuture?.cancel(false)
             clientFuture = executor.scheduleWithFixedDelay(this::startSendHeartBeats, settings.heartbeatInterval, settings.heartbeatInterval, TimeUnit.MILLISECONDS)
             LOGGER.info { "Message has been sent to server - HeartBeats." }
 
@@ -83,7 +88,6 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
         buffer.resetReaderIndex()
 
         if (!MessageType.contains(messageType)){
-            buffer.resetReaderIndex()
             LOGGER.error { "Message type is not supported. Type: $messageType, length: $messageLength" }
             return null
         }
@@ -99,7 +103,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
         }
 
         buffer.readerIndex(buffer.writerIndex())
-        return buffer.copy(buffer.readerIndex() - messageLength, messageLength)
+        return buffer.retainedSlice(buffer.readerIndex() - messageLength, messageLength)
     }
 
     override fun onIncoming(message: ByteBuf): Map<String, String> {
@@ -107,113 +111,187 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
         when (val msgType = msgHeader.type) {
             MessageType.LOGIN_RESPONSE.type -> {
-                LOGGER.info { "Type message - LoginResponse." }
-                val loginResponse = LoginResponse(message)
-
-                when (val status = Status.getStatus(loginResponse.status)) {
-                    Status.OK -> {
-                        LOGGER.info { "Login successful. Start sending heartbeats." }
-
-                        if (state.compareAndSet(
-                                State.SESSION_CREATED,
-                                State.LOGGED_IN
-                            )
-                        ) {
-                            LOGGER.info("Setting a new state -> ${state.get()}.")
-                            serverFuture =
-                                executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
-                        } else LOGGER.info { "Failed to set a new state. ${State.LOGGED_IN} -> ${state.get()}." }
-                    }
-                    Status.NOT_LOGGED_IN -> {
-                        if (!state.compareAndSet(State.SESSION_CREATED, State.SESSION_CLOSE))
-                            LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
-                        stopSendHeartBeats()
-                        LOGGER.info("Received `not logged in` status. Fall in to error state.")
-                        sendClose()
-                    }
-                    else -> error("Received $status status.")
-                }
-                return messageMetadata(MessageType.LOGIN_RESPONSE)
+                return checkLoginResponse(message)
             }
 
             MessageType.STREAM_AVAIL.type -> {
-                LOGGER.info { "Type message - StreamAvail." }
-
-                executor.awaitTermination(0,TimeUnit.MILLISECONDS)
-                serverFuture =
-                    executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
-
-                val streamAvail = StreamAvail(message)
-                message.readerIndex(4)
-                streamId = StreamIdEncode(StreamId(message))
-
-                val endSeq = 99999
-                val open = Open(
-                    streamId.streamId,
-                    streamAvail.nextSeq,
-                    endSeq
-                )
-
-                channel.send(
-                    open.open(),
-                    messageMetadata(MessageType.OPEN), IChannel.SendMode.MANGLE
-                )
-                LOGGER.info { "Message has been sent to server - Open." }
-
-                return messageMetadata(MessageType.STREAM_AVAIL)
+                return checkStreamAvail(message)
             }
 
             MessageType.OPEN_RESPONSE.type -> {
-                LOGGER.info { "Type message - OpenResponse." }
-                val openResponse = OpenResponse(message)
-
-                when (Status.getStatus(openResponse.status)) {
-                    Status.OK -> {
-                        LOGGER.info("Open successful.")
-                        channel.send(
-                            Close(streamId.streamIdBuf).close(),
-                            messageMetadata(MessageType.CLOSE),
-                            IChannel.SendMode.MANGLE
-                        )
-                        LOGGER.info { "Message has been sent to server - Close." }
-                    }
-                    Status.NO_STREAM_PERMISSION -> LOGGER.warn { "No stream permission." }
-                    else -> error("This is not an OpenResponse status.")
-                }
-                return messageMetadata(MessageType.OPEN_RESPONSE)
+                return checkOpenResponse(message)
             }
 
             MessageType.SEQMSG.type -> {
-                LOGGER.info { "Type message - SeqMsg." }
-                channel.send(
-                    SeqMsgToSend(SeqMsg(message)).seqMsg(),
-                    messageMetadata(MessageType.SEQMSG),
-                    IChannel.SendMode.MANGLE
-                )
-                LOGGER.info { "Message has been sent to server - SeqMsg." }
-                return messageMetadata(MessageType.SEQMSG)
+                return checkSeqMsg(message)
             }
 
             MessageType.CLOSE_RESPONSE.type -> {
-                LOGGER.info { "Type message - CloseResponse." }
-                val closeResponse = CloseResponse(message)
-                when (Status.getStatus(closeResponse.status)) {
-                    Status.OK -> LOGGER.info("Open successful.")
-                    Status.STREAM_NOT_OPEN -> LOGGER.warn { "Stream not open." }
-                    else -> error("This is not an CloseResponse status.")
-                }
-                return messageMetadata(MessageType.CLOSE_RESPONSE)
+                return checkCloseResponse(message)
             }
 
             else -> error("Message type is not supported: $msgType.")
         }
     }
 
+    private fun checkLoginResponse(message: ByteBuf): Map<String, String> {
+        val loginResponse = LoginResponse(message)
+
+        LOGGER.info { "Type message - LoginResponse: $loginResponse" }
+        when (val status = Status.getStatus(loginResponse.status)) {
+            Status.OK -> {
+                LOGGER.info { "Login successful. Server start sending heartbeats." }
+
+                if (state.compareAndSet(
+                        State.SESSION_CREATED,
+                        State.LOGGED_IN
+                    )
+                ) {
+                    LOGGER.info("Setting a new state -> ${state.get()}.")
+                    serverFuture?.cancel(false)
+                    serverFuture =
+                        executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
+                } else LOGGER.info { "Failed to set a new state. ${State.LOGGED_IN} -> ${state.get()}." }
+            }
+            Status.NOT_LOGGED_IN -> {
+                if (!state.compareAndSet(State.SESSION_CREATED, State.SESSION_CLOSE))
+                    LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
+                stopSendHeartBeats()
+                LOGGER.info("Received `not logged in` status. Fall in to error state.")
+                sendClose()
+            }
+            else -> error("Received $status status.")
+        }
+        return messageMetadata(MessageType.LOGIN_RESPONSE)
+    }
+
+    private fun checkStreamAvail(message: ByteBuf): Map<String, String> {
+        executor.awaitTermination(0,TimeUnit.MILLISECONDS)
+        serverFuture?.cancel(false)
+        serverFuture =
+            executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
+
+        val streamAvail = StreamAvail(message)
+
+        LOGGER.info { "Type message - StreamAvail: $streamAvail" }
+        message.readerIndex(4)
+        streamId = StreamIdEncode(StreamId(message))
+
+        var open: ByteBuf = Unpooled.buffer()
+
+        if (streamAvail.streamId.streamType == StreamType.REF.value || streamAvail.streamId.streamType == StreamType.GT.value){
+            val streamType = Access.READ.value.toInt()
+            startRead.getAndSet(streamAvail.nextSeq.toInt())
+            endRead.getAndSet(streamAvail.nextSeq.toInt()+1)
+            open = Open(
+                streamId.streamId,
+                startRead.get(),
+                endRead.get()
+            ).open()
+            readingConnection.getAndSet(true)
+        }
+        else if (streamAvail.streamId.streamType == StreamType.TG.value) {
+            val streamType = Access.WRITE.value.toInt()
+            startWrite.getAndSet(streamAvail.nextSeq.toInt())
+            endWrite.getAndSet(streamAvail.nextSeq.toInt()+1) //TODO
+            open = Open(
+                streamId.streamId,
+                startWrite.get(),
+                endWrite.get()
+            ).open()
+            writingConnection.getAndSet(true)
+        }
+
+        channel.send(
+            open,
+            messageMetadata(MessageType.OPEN), IChannel.SendMode.MANGLE
+        )
+
+        LOGGER.info { "Message has been sent to server - Open."}
+        return messageMetadata(MessageType.STREAM_AVAIL)
+    }
+
+    private fun checkOpenResponse(message: ByteBuf): Map<String, String> {
+
+        val openResponse = OpenResponse(message)
+        LOGGER.info { "Type message - OpenResponse: $openResponse" }
+
+        when (Status.getStatus(openResponse.status)) {
+            Status.OK -> {
+                LOGGER.info("Open successful.")
+                if (readingConnection.get()) {
+                    LOGGER.info { "Open for READ" }
+                    readingConnection.getAndSet(false)
+                }
+
+                if (writingConnection.get()) {
+                    LOGGER.info { "Open for WRITE" }
+                    var i = startWrite.get()
+                    while (i < endWrite.get()) {
+                        LOGGER.info { "Message has been sent to server - Heartbeat" }
+                        channel.send(
+                            //SeqMsgToSend(i, openResponse.streamId).seqMsg(),
+                            Heartbeat().heartbeat,
+                            messageMetadata(MessageType.SEQMSG),
+                            IChannel.SendMode.MANGLE
+                        )
+                        i++
+                    }
+                    writingConnection.getAndSet(false)
+                }
+            }
+
+            Status.NO_STREAM_PERMISSION -> LOGGER.warn { "No stream permission." }
+            else -> error("This is not an OpenResponse status.")
+        }
+
+        return messageMetadata(MessageType.OPEN_RESPONSE)
+    }
+
+    private fun checkSeqMsg(message: ByteBuf): Map<String, String> {
+        val seqMsg = SeqMsg(message)
+
+        LOGGER.info { "Type message - SeqMsg: $seqMsg" }
+
+        startRead.getAndSet(1)
+        if (startRead == endRead){
+            channel.send(
+                Close(streamId.streamIdBuf).close(),
+                messageMetadata(MessageType.CLOSE),
+                IChannel.SendMode.MANGLE
+            )
+            LOGGER.info { "Message has been sent to server - Close." }
+        }
+
+        return messageMetadata(MessageType.SEQMSG)
+    }
+
+    private fun checkCloseResponse(message: ByteBuf): Map<String, String> {
+        val closeResponse = CloseResponse(message)
+
+        LOGGER.info { "Type message - CloseResponse: $closeResponse" }
+
+        when (Status.getStatus(closeResponse.status)) {
+            Status.OK -> LOGGER.info("Open successful.")
+            Status.STREAM_NOT_OPEN -> LOGGER.warn { "Stream not open." }
+            else -> error("This is not an CloseResponse status.")
+        }
+
+        return messageMetadata(MessageType.CLOSE_RESPONSE)
+    }
+
     override fun onOutgoing(message: ByteBuf, metadata: Map<String, String>): Map<String, String> {
-        val buffer: ByteBuf = Unpooled.buffer(message.readableBytes() + 4)
-        buffer.writeShort(metadata[TYPE_FIELD_NAME]!!.toInt())
-        buffer.writeShort(message.readableBytes() + 4)
-        buffer.writeBytes(message)
+        val offset = message.readerIndex()
+        val msgHeader = MsgHeader(message)
+        val type = metadata[TYPE_FIELD_NAME]!!.toInt()
+        if (msgHeader.type!= type){
+            val buffer: ByteBuf = message.copy(4, message.readableBytes()-4)
+            message.readerIndex(offset)
+            message.writerIndex(offset)
+            message.writeShortLE(type)
+            message.writeShortLE(metadata[LENGTH_FIELD_NAME]!!.toInt())
+            message.writeBytes(buffer)
+        }
         return metadata
     }
 
@@ -256,7 +334,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     private fun receivedHeartBeats() {
-        serverFuture?.cancel(true)
+        serverFuture?.cancel(false)
         if (state.compareAndSet(state.get(), State.NOT_HEARTBEAT)) {
             LOGGER.warn { "Server stopped sending heartbeat." }
             LOGGER.info { "Setting a new state -> ${state.get()}." }

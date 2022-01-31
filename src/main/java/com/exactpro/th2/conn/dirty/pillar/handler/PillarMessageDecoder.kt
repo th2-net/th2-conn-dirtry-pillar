@@ -33,7 +33,6 @@ class MsgHeader(byteBuf: ByteBuf) {
 
     init {
         try {
-            byteBuf.readerIndex(0)
             type = byteBuf.readUnsignedShortLE()
             length = byteBuf.readUnsignedShortLE()
         }
@@ -64,11 +63,16 @@ class LoginResponse(byteBuf: ByteBuf) {
     val status: Short
 
     init {
-        byteBuf.markReaderIndex()
+        var offset = byteBuf.readerIndex()
         username = byteBuf.readCharSequence(16, StandardCharsets.US_ASCII).toString().trimEnd(0.toChar())
-        byteBuf.readerIndex(20)
+        offset += 16
+        byteBuf.readerIndex(offset)
         status = byteBuf.readUnsignedByte()
         require(byteBuf.readerIndex() == MessageType.LOGIN_RESPONSE.length){ "There are bytes left in buffer to read" }
+    }
+
+    override fun toString(): String {
+        return "$username $status"
     }
 }
 
@@ -78,19 +82,25 @@ class StreamAvail(byteBuf: ByteBuf) {
     val access: Short
 
     init {
-        byteBuf.markReaderIndex()
+        var offset = byteBuf.readerIndex()
         streamId = StreamId(byteBuf)
 
-        byteBuf.readerIndex(12)
+        offset += 8
+        byteBuf.readerIndex(offset)
         val bytes = ByteArray(8)
         byteBuf.readBytes(bytes)
         bytes.reverse()
         nextSeq = BigInteger(1, bytes).toBigDecimal()
 
-        byteBuf.readerIndex(20)
+        offset += 8
+        byteBuf.readerIndex(offset)
         access = byteBuf.readUnsignedByte()
 
-        require(byteBuf.readerIndex() == MessageType.STREAM_AVAIL.length){ "There are bytes left in buffer to read" }
+        require(byteBuf.readerIndex() == MessageType.STREAM_AVAIL.length) { "There are bytes left in buffer to read" }
+    }
+
+    override fun toString(): String {
+        return "${streamId.envId} ${streamId.sessNum} ${streamId.streamType} ${streamId.userId} ${streamId.subId} $nextSeq $access"
     }
 }
 
@@ -100,14 +110,21 @@ class OpenResponse(byteBuf: ByteBuf) {
     val access: Short
 
     init {
-        byteBuf.markReaderIndex()
+        var offset = byteBuf.readerIndex()
         streamId = StreamId(byteBuf)
-        byteBuf.readerIndex(12)
-        status = byteBuf.readUnsignedByte()
-        byteBuf.readerIndex(13)
-        access = byteBuf.readUnsignedByte()
 
+        offset += 8
+        byteBuf.readerIndex(offset)
+        status = byteBuf.readUnsignedByte()
+
+        offset++
+        byteBuf.readerIndex(offset)
+        access = byteBuf.readUnsignedByte()
         require(byteBuf.readerIndex() == MessageType.OPEN_RESPONSE.length){ "There are bytes left in buffer to read" }
+    }
+
+    override fun toString(): String {
+        return "${streamId.envId} ${streamId.sessNum} ${streamId.streamType} ${streamId.userId} ${streamId.subId} $status $access"
     }
 }
 
@@ -116,12 +133,18 @@ class CloseResponse(byteBuf: ByteBuf){
     val status: Short
 
     init {
-        byteBuf.markReaderIndex()
+        var offset = byteBuf.readerIndex()
         streamId = StreamId(byteBuf)
-        byteBuf.readerIndex(12)
+
+        offset += 8
+        byteBuf.readerIndex(offset)
         status = byteBuf.readUnsignedByte()
 
         require(byteBuf.readerIndex() == MessageType.CLOSE_RESPONSE.length){ "There are bytes left in buffer to read" }
+    }
+
+    override fun toString(): String {
+        return "${streamId.envId} ${streamId.sessNum} ${streamId.streamType} ${streamId.userId} ${streamId.subId} $status"
     }
 }
 
@@ -132,18 +155,22 @@ class SeqMsg(byteBuf: ByteBuf) {
     val timestamp: LocalDateTime
 
     init {
-        byteBuf.markReaderIndex()
+        var offset = byteBuf.readerIndex()
         streamId = StreamId(byteBuf)
 
-        byteBuf.readerIndex(12)
+        offset += 8
+        byteBuf.readerIndex(offset)
         val bytes = ByteArray(8)
         byteBuf.readBytes(bytes)
         bytes.reverse()
         seq = BigInteger(1, bytes).toBigDecimal()
 
-        byteBuf.readerIndex(20)
+        offset += 8
+        byteBuf.readerIndex(offset)
         reserved1 = byteBuf.readMedium()
-        byteBuf.readerIndex(24)
+
+        offset += 4
+        byteBuf.readerIndex(offset)
 
         val time = byteBuf.readLongLE().toULong()
         val milliseconds = time / 1_000_000UL
@@ -151,6 +178,10 @@ class SeqMsg(byteBuf: ByteBuf) {
         timestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(milliseconds.toLong()), ZoneOffset.UTC).withNano(
             nanoseconds.toInt())
         require(byteBuf.readerIndex() == MessageType.SEQMSG.length){ "There are bytes left in buffer to read" }
+    }
+
+    override fun toString(): String {
+        return "${streamId.envId} ${streamId.sessNum} ${streamId.streamType} ${streamId.userId} ${streamId.subId} $seq $reserved1 $timestamp"
     }
 }
 

@@ -17,9 +17,7 @@
 package com.exactpro.th2.conn.dirty.pillar.handler
 
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings
-import com.google.auto.service.AutoService
 
-@AutoService(IProtocolHandlerSettings::class)
 class PillarHandlerSettings: IProtocolHandlerSettings {
     var username: String = "username"
 
