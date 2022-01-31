@@ -112,7 +112,7 @@ class TestHandler {
             .writeByte(4)
             .writeByte(BigDecimal.valueOf(23).toInt())
             .writerIndex(41)
-            .writeByte(6)
+            .writeByte(1)
 
         pillarHandler.onReceive(buffer)
         assertEquals(42, buffer.readerIndex())
@@ -126,7 +126,7 @@ class TestHandler {
         assertEquals(40287, streamAvail.streamId.userId)
         assertEquals(4, streamAvail.streamId.subId)
         assertEquals(BigDecimal.valueOf(23), streamAvail.nextSeq)
-        assertEquals(6, streamAvail.access)
+        assertEquals(1, streamAvail.access)
 
 
         buffer.writeShortLE(515)
@@ -138,7 +138,7 @@ class TestHandler {
             .writeByte(4)
             .writeByte(BigDecimal.valueOf(23).toInt())
             .writerIndex(62)
-            .writeByte(6)
+            .writeByte(2)
 
         pillarHandler.onReceive(buffer)
         assertEquals(63, buffer.readerIndex())
@@ -152,7 +152,7 @@ class TestHandler {
         assertEquals(40287, streamAvail.streamId.userId)
         assertEquals(4, streamAvail.streamId.subId)
         assertEquals(BigDecimal.valueOf(23), streamAvail.nextSeq)
-        assertEquals(6, streamAvail.access)
+        assertEquals(2, streamAvail.access)
     }
 
     @Test
@@ -167,7 +167,7 @@ class TestHandler {
             .writeByte(4)
             .writeByte(BigDecimal.valueOf(23).toInt())
             .writerIndex(20)
-            .writeByte(6)
+            .writeByte(1)
 
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
@@ -181,7 +181,7 @@ class TestHandler {
         assertEquals(40287, streamAvail.streamId.userId)
         assertEquals(4, streamAvail.streamId.subId)
         assertEquals(BigDecimal.valueOf(23), streamAvail.nextSeq)
-        assertEquals(6, streamAvail.access)
+        assertEquals(1, streamAvail.access)
     }
 
     @Test
@@ -306,7 +306,7 @@ class TestHandler {
         )
         val buffer: ByteBuf = Unpooled.buffer()
         buffer.writeBytes(stream)
-        val open = Open(StreamId(buffer), BigDecimal.valueOf(23), 9999).open()
+        val open = Open(StreamId(buffer), 23, 9999).open()
 
         assertEquals(30, open.writerIndex())
 
@@ -350,7 +350,7 @@ class TestHandler {
 
         buffer.readerIndex(4)
         val seqMsg = SeqMsg(buffer)
-        val seqMsgToSend = SeqMsgToSend(seqMsg).seqMsg()
+        val seqMsgToSend = SeqMsgToSend(1, seqMsg.streamId).seqMsg()
 
         assertEquals(32, seqMsgToSend.writerIndex())
 
@@ -428,12 +428,12 @@ class TestHandler {
 
         val pillarHandler = PillarHandler(context)
         val metadata = mutableMapOf<String, String>()
-        metadata[TYPE_FIELD_NAME] = 517.toString()
+        metadata[TYPE_FIELD_NAME] = 500.toString()
         metadata[LENGTH_FIELD_NAME] = 21.toString()
 
         val onOutgoing = pillarHandler.onOutgoing(buffer, metadata)
 
-        assertEquals(517.toString(), onOutgoing[TYPE_FIELD_NAME])
+        assertEquals(500.toString(), onOutgoing[TYPE_FIELD_NAME])
         assertEquals(21.toString(), onOutgoing[LENGTH_FIELD_NAME])
     }
 
