@@ -363,8 +363,8 @@ class TestHandler {
         val seqMsg = SeqMsg(buffer, 32)
         val message = Unpooled.buffer()
         val metadata = HashMap<String, String>()
-        metadata[TYPE_FIELD_NAME] = 22.toString()
-        metadata[LENGTH_FIELD_NAME] = 0.toString()
+//        metadata[TYPE_FIELD_NAME] = 22.toString()
+//        metadata[LENGTH_FIELD_NAME] = 0.toString()
         SeqMsgToSend(message, 1, seqMsg.streamId, metadata).seqMsg()
 
         assertEquals(32, message.writerIndex())
@@ -376,6 +376,9 @@ class TestHandler {
         assertEquals(15, message.readByte())
         assertEquals(40287, message.readUnsignedShort())
         assertEquals(4, message.readByte().toInt())
+        message.readerIndex(28)
+        assertEquals(0, message.readUnsignedShortLE())
+        assertEquals(0, message.readUnsignedShortLE())
     }
 
     @Test

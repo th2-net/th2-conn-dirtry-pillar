@@ -153,7 +153,8 @@ class SeqMsgToSend(private val message: ByteBuf,
         val nanoseconds = time.nano.toULong()
         message.writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
 
-        println(message.writerIndex())
+        message.writerIndex(28 + size)
+
         if (metadata[TYPE_FIELD_NAME] != null)
             message.writeShortLE(metadata[TYPE_FIELD_NAME]!!.toInt())
         else message.writeShortLE(0)
