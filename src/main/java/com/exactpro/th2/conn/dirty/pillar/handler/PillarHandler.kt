@@ -252,6 +252,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                 LOGGER.info("Close successful.")
                 if (state.compareAndSet(State.OPEN_OUT, State.LOGGED_OUT)) {
                     LOGGER.info { "Setting a new state -> ${state.get()}." }
+                    connectRead.getAndSet(OpenType.CLOSE)
+                    connectWrite.getAndSet(OpenType.CLOSE)
                 } else LOGGER.info { "Failed to set a new state ${State.LOGGED_OUT}." }
             }
             Status.STREAM_NOT_OPEN -> LOGGER.warn { "Stream not close." }
@@ -274,6 +276,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
         if (state.compareAndSet(State.OPEN_IN, State.SESSION_CLOSE)) {
             LOGGER.info { "Setting a new state -> ${state.get()}." }
             LOGGER.info { "Handler is disconnected." }
+            connectRead.getAndSet(OpenType.CLOSE)
+            connectWrite.getAndSet(OpenType.CLOSE)
         } else LOGGER.info { "Failed to set a new state ${State.SESSION_CLOSE}." }
     }
 
@@ -306,6 +310,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             LOGGER.info { "Setting a new state -> ${state.get()}." }
             channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
             LOGGER.info { "Message has been sent to server - Login." }
+            connectRead.getAndSet(OpenType.CLOSE)
+            connectWrite.getAndSet(OpenType.CLOSE)
         } else LOGGER.info { "Failed to set a new state ${State.SESSION_CREATED}." }
     }
 
