@@ -22,13 +22,14 @@ import com.exactpro.th2.conn.dirty.tcp.core.api.IContext
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandler
 import com.exactpro.th2.conn.dirty.tcp.core.api.IProtocolHandlerSettings
 import io.netty.buffer.ByteBuf
-import io.netty.buffer.Unpooled
 import mu.KotlinLogging
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+
 class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IProtocolHandler {
 
     private var state = AtomicReference(State.SESSION_CLOSE)
@@ -38,12 +39,11 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     private lateinit var streamId: StreamIdEncode
     private var settings: PillarHandlerSettings
     lateinit var channel: IChannel
-    private var startRead = AtomicReference(0)
-    private var endRead = AtomicReference(0)
-    private var startWrite = AtomicReference(0)
-    private var endWrite = AtomicReference(0)
-    private var readingConnection = AtomicReference(false)
-    private var writingConnection = AtomicReference(false)
+    private var connectRead = AtomicReference(OpenType.CLOSE)
+    private var connectWrite = AtomicReference(OpenType.CLOSE)
+    private var serverSeqNum = AtomicInteger(0)
+    private var clientSeqNum = AtomicInteger(0)
+    private val seqNum = 1000
 
     init{
         settings = context.settings as PillarHandlerSettings
@@ -64,7 +64,6 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
             clientFuture?.cancel(false)
             clientFuture = executor.scheduleWithFixedDelay(this::startSendHeartBeats, settings.heartbeatInterval, settings.heartbeatInterval, TimeUnit.MILLISECONDS)
-            LOGGER.info { "Message has been sent to server - HeartBeats." }
 
             LOGGER.info { "Handler is connected." }
         } else LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
@@ -123,7 +122,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             }
 
             MessageType.SEQMSG.type -> {
-                return checkSeqMsg(message)
+                return checkSeqMsg(message, msgHeader)
             }
 
             MessageType.CLOSE_RESPONSE.type -> {
@@ -158,7 +157,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                     LOGGER.info { "Failed to set a new state. ${State.SESSION_CLOSE} -> ${state.get()}." }
                 stopSendHeartBeats()
                 LOGGER.info("Received `not logged in` status. Fall in to error state.")
-                sendClose()
+                channel.send(Login(settings).login(), messageMetadata(MessageType.LOGIN), IChannel.SendMode.MANGLE)
             }
             else -> error("Received $status status.")
         }
@@ -166,7 +165,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     private fun checkStreamAvail(message: ByteBuf): Map<String, String> {
-        executor.awaitTermination(0,TimeUnit.MILLISECONDS)
+        executor.awaitTermination(0, TimeUnit.MILLISECONDS)
         serverFuture?.cancel(false)
         serverFuture =
             executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
@@ -177,37 +176,33 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
         message.readerIndex(4)
         streamId = StreamIdEncode(StreamId(message))
 
-        var open: ByteBuf = Unpooled.buffer()
 
-        if (streamAvail.streamId.streamType == StreamType.REF.value || streamAvail.streamId.streamType == StreamType.GT.value){
-            val streamType = Access.READ.value.toInt()
-            startRead.getAndSet(streamAvail.nextSeq.toInt())
-            endRead.getAndSet(streamAvail.nextSeq.toInt()+1)
-            open = Open(
-                streamId.streamId,
-                startRead.get(),
-                endRead.get()
-            ).open()
-            readingConnection.getAndSet(true)
+        if (streamAvail.streamId.streamType == StreamType.REF.value || streamAvail.streamId.streamType == StreamType.GT.value) {
+            if (connectRead.compareAndSet(OpenType.CLOSE, OpenType.SENT)) {
+                channel.send(
+                    Open(
+                        streamId.streamId,
+                        streamAvail.nextSeq.toInt(),
+                        streamAvail.nextSeq.toInt() + 12
+                    ).open(),
+                    messageMetadata(MessageType.OPEN), IChannel.SendMode.MANGLE
+                )
+                LOGGER.info { "Message has been sent to server - Open for read." }
+            }
+        } else if (streamAvail.streamId.streamType == StreamType.TG.value) {
+            if (connectWrite.compareAndSet(OpenType.CLOSE, OpenType.SENT)) {
+                channel.send(
+                    Open(
+                        streamId.streamId,
+                        streamAvail.nextSeq.toInt(),
+                        streamAvail.nextSeq.toInt() + seqNum
+                    ).open(),
+                    messageMetadata(MessageType.OPEN), IChannel.SendMode.MANGLE
+                )
+                LOGGER.info { "Message has been sent to server - Open for write." }
+            }
         }
-        else if (streamAvail.streamId.streamType == StreamType.TG.value) {
-            val streamType = Access.WRITE.value.toInt()
-            startWrite.getAndSet(streamAvail.nextSeq.toInt())
-            endWrite.getAndSet(streamAvail.nextSeq.toInt()+1) //TODO
-            open = Open(
-                streamId.streamId,
-                startWrite.get(),
-                endWrite.get()
-            ).open()
-            writingConnection.getAndSet(true)
-        }
 
-        channel.send(
-            open,
-            messageMetadata(MessageType.OPEN), IChannel.SendMode.MANGLE
-        )
-
-        LOGGER.info { "Message has been sent to server - Open."}
         return messageMetadata(MessageType.STREAM_AVAIL)
     }
 
@@ -219,25 +214,13 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
         when (Status.getStatus(openResponse.status)) {
             Status.OK -> {
                 LOGGER.info("Open successful.")
-                if (readingConnection.get()) {
-                    LOGGER.info { "Open for READ" }
-                    readingConnection.getAndSet(false)
-                }
 
-                if (writingConnection.get()) {
-                    LOGGER.info { "Open for WRITE" }
-                    var i = startWrite.get()
-                    while (i < endWrite.get()) {
-                        LOGGER.info { "Message has been sent to server - Heartbeat" }
-                        channel.send(
-                            //SeqMsgToSend(i, openResponse.streamId).seqMsg(),
-                            Heartbeat().heartbeat,
-                            messageMetadata(MessageType.SEQMSG),
-                            IChannel.SendMode.MANGLE
-                        )
-                        i++
-                    }
-                    writingConnection.getAndSet(false)
+                connectRead.compareAndSet(OpenType.SENT, OpenType.OPEN)
+                connectWrite.compareAndSet(OpenType.SENT, OpenType.OPEN)
+
+                if (connectRead.get() == OpenType.OPEN || connectWrite.get() == OpenType.OPEN){
+                    if (state.compareAndSet(State.LOGGED_IN, State.OPEN_IN)|| state.get() == State.OPEN_IN)
+                        LOGGER.info { "Setting state -> ${state.get()}" }
                 }
             }
 
@@ -248,21 +231,14 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
         return messageMetadata(MessageType.OPEN_RESPONSE)
     }
 
-    private fun checkSeqMsg(message: ByteBuf): Map<String, String> {
-        val seqMsg = SeqMsg(message)
 
+    private fun checkSeqMsg(message: ByteBuf, header: MsgHeader): Map<String, String> {
+        val seqMsg = SeqMsg(message, header.length)
         LOGGER.info { "Type message - SeqMsg: $seqMsg" }
-
-        startRead.getAndSet(1)
-        if (startRead == endRead){
-            channel.send(
-                Close(streamId.streamIdBuf).close(),
-                messageMetadata(MessageType.CLOSE),
-                IChannel.SendMode.MANGLE
-            )
-            LOGGER.info { "Message has been sent to server - Close." }
+        serverSeqNum.incrementAndGet()
+        if(serverSeqNum.get() == seqNum){
+            connectRead.compareAndSet(OpenType.OPEN, OpenType.CLOSE)
         }
-
         return messageMetadata(MessageType.SEQMSG)
     }
 
@@ -272,8 +248,13 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
         LOGGER.info { "Type message - CloseResponse: $closeResponse" }
 
         when (Status.getStatus(closeResponse.status)) {
-            Status.OK -> LOGGER.info("Open successful.")
-            Status.STREAM_NOT_OPEN -> LOGGER.warn { "Stream not open." }
+            Status.OK -> {
+                LOGGER.info("Close successful.")
+                if (state.compareAndSet(State.OPEN_OUT, State.LOGGED_OUT)) {
+                    LOGGER.info { "Setting a new state -> ${state.get()}." }
+                } else LOGGER.info { "Failed to set a new state ${State.LOGGED_OUT}." }
+            }
+            Status.STREAM_NOT_OPEN -> LOGGER.warn { "Stream not close." }
             else -> error("This is not an CloseResponse status.")
         }
 
@@ -281,43 +262,38 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     override fun onOutgoing(message: ByteBuf, metadata: Map<String, String>): Map<String, String> {
-        val offset = message.readerIndex()
-        val msgHeader = MsgHeader(message)
-        val type = metadata[TYPE_FIELD_NAME]!!.toInt()
-        if (msgHeader.type!= type){
-            val buffer: ByteBuf = message.copy(4, message.readableBytes()-4)
-            message.readerIndex(offset)
-            message.writerIndex(offset)
-            message.writeShortLE(type)
-            message.writeShortLE(metadata[LENGTH_FIELD_NAME]!!.toInt())
-            message.writeBytes(buffer)
+        clientSeqNum.incrementAndGet()
+        SeqMsgToSend(message, clientSeqNum.get(), streamId.streamId, metadata)
+        if(clientSeqNum.get() == seqNum){
+            connectWrite.compareAndSet(OpenType.OPEN, OpenType.CLOSE)
         }
         return metadata
     }
 
     override fun onClose() {
-        sendClose()
-        if (state.compareAndSet(State.LOGGED_OUT, State.SESSION_CLOSE)) {
+        if (state.compareAndSet(State.OPEN_IN, State.SESSION_CLOSE)) {
             LOGGER.info { "Setting a new state -> ${state.get()}." }
             LOGGER.info { "Handler is disconnected." }
         } else LOGGER.info { "Failed to set a new state ${State.SESSION_CLOSE}." }
     }
 
     override fun close() {
+        if (state.compareAndSet(State.OPEN_IN, State.OPEN_OUT)){
+            LOGGER.info { "Setting a new state -> ${state.get()}." }
+            channel.send(
+                Close(streamId.streamIdBuf).close(),
+                messageMetadata(MessageType.CLOSE),
+                IChannel.SendMode.MANGLE
+            )
+            LOGGER.info { "Message has been sent to server - Close." }
+        } else LOGGER.info { "Failed to set a new state ${State.OPEN_OUT}." }
         executor.shutdown()
         if (!executor.awaitTermination(3000, TimeUnit.MILLISECONDS)) executor.shutdownNow()
     }
 
-    private fun sendClose() {
-        if (state.compareAndSet(State.LOGGED_IN, State.LOGGED_OUT)) {
-            state.getAndSet(State.LOGGED_OUT)
-            LOGGER.info { "Setting a new state -> ${state.get()}." }
-
-        } else LOGGER.info { "Failed to set a new state ${State.LOGGED_OUT}." }
-    }
-
     private fun startSendHeartBeats() {
         channel.send(Heartbeat().heartbeat, messageMetadata(MessageType.HEARTBEAT), IChannel.SendMode.MANGLE)
+        LOGGER.info { "Message has been sent to server - HeartBeats." }
     }
 
     private fun stopSendHeartBeats() {

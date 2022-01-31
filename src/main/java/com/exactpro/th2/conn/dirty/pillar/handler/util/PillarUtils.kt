@@ -16,6 +16,9 @@
 
 package com.exactpro.th2.conn.dirty.pillar.handler.util
 
+import org.checkerframework.checker.units.qual.A
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.experimental.and
 import kotlin.experimental.or
 
@@ -28,7 +31,9 @@ enum class State(val value: Int){
     SESSION_CLOSE(1),
     LOGGED_IN(2),
     LOGGED_OUT(3),
-    NOT_HEARTBEAT(4);
+    NOT_HEARTBEAT(4),
+    OPEN_IN(5),
+    OPEN_OUT(6);
 }
 
 enum class Status(val value: Short) {
@@ -55,12 +60,8 @@ enum class Access(val value: Short) {
     THROTTLE_REJECT(4);
 
     companion object {
-        fun getPermission(permission: Short): Short {
-            var result: Short = 0
-            values().forEach { access ->
-                result = result or (access.value and permission)
-            }
-            return result
+        fun getAccess(value: Short): Access? {
+            return values().find { it.value == value }
         }
     }
 }
@@ -97,4 +98,10 @@ enum class MessageType(val type: Int, val length: Int) {
             return values().find { it.type == type } != null
         }
     }
+}
+
+enum class OpenType (type: Int){
+    CLOSE(0),
+    SENT(1),
+    OPEN(2);
 }

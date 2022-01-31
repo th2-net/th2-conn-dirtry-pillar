@@ -19,6 +19,7 @@ package com.exactpro.th2.conn.dirty.pillar.handler
 import com.exactpro.th2.conn.dirty.pillar.handler.util.MessageType
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.ByteBufUtil
+import org.checkerframework.checker.units.qual.Length
 import java.lang.Exception
 import java.math.BigDecimal
 import java.math.BigInteger
@@ -148,11 +149,12 @@ class CloseResponse(byteBuf: ByteBuf){
     }
 }
 
-class SeqMsg(byteBuf: ByteBuf) {
+class SeqMsg(byteBuf: ByteBuf, length: Int) {
     val streamId: StreamId
     val seq: BigDecimal
-    val reserved1: Int
+    val reserved1: ByteBuf
     val timestamp: LocalDateTime
+    val payload: MsgHeader
 
     init {
         var offset = byteBuf.readerIndex()
@@ -166,10 +168,9 @@ class SeqMsg(byteBuf: ByteBuf) {
         seq = BigInteger(1, bytes).toBigDecimal()
 
         offset += 8
-        byteBuf.readerIndex(offset)
-        reserved1 = byteBuf.readMedium()
+        reserved1 = byteBuf.copy(offset, length - MessageType.SEQMSG.length)
 
-        offset += 4
+        offset += length - MessageType.SEQMSG.length
         byteBuf.readerIndex(offset)
 
         val time = byteBuf.readLongLE().toULong()
@@ -177,7 +178,11 @@ class SeqMsg(byteBuf: ByteBuf) {
         val nanoseconds = time % 1_000_000_000UL
         timestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(milliseconds.toLong()), ZoneOffset.UTC).withNano(
             nanoseconds.toInt())
-        require(byteBuf.readerIndex() == MessageType.SEQMSG.length){ "There are bytes left in buffer to read" }
+        offset += 8
+        byteBuf.readerIndex(offset)
+        payload = MsgHeader(byteBuf)
+
+        require(byteBuf.readerIndex() == length){ "There are bytes left in buffer to read" }
     }
 
     override fun toString(): String {

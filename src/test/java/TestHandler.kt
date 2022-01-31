@@ -32,12 +32,11 @@ import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import io.netty.channel.EventLoopGroup
 import io.netty.channel.nio.NioEventLoopGroup
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.Mockito.mock
 import com.nhaarman.mockitokotlin2.mock
-import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.*
 import java.io.InputStream
 import java.math.BigDecimal
 import java.math.BigInteger
@@ -252,9 +251,11 @@ class TestHandler {
         val seconds = time.toEpochSecond(ZoneOffset.UTC).toULong()
         val nanoseconds = time.nano.toULong()
 
+        val reserved = Unpooled.buffer().writeBytes(byteArrayOf(0, 1, 2, 3))
+
         val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeShortLE(2309)
-            .writeShortLE(32)
+            .writeShortLE(2309)
+            .writeShortLE(36)
             .writeByte(5)
             .writeMedium(4259845)
             .writeByte(13)
@@ -262,17 +263,20 @@ class TestHandler {
             .writeByte(4)
             .writeByte(BigDecimal.valueOf(23).toInt())
             .writerIndex(20)
-            .writeMedium(0)
+            .writeBytes(reserved)
             .writerIndex(24)
             .writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
+            .writerIndex(32)
+            .writeShortLE(22)
+            .writeShortLE(4)
 
         val pillarHandler = PillarHandler(context)
         pillarHandler.channel = channel
         pillarHandler.onReceive(buffer)
-        assertEquals(32, buffer.readerIndex())
+        assertEquals(36, buffer.readerIndex())
 
         buffer.readerIndex(4)
-        val seqMsg = SeqMsg(buffer)
+        val seqMsg = SeqMsg(buffer, 36)
 
         assertEquals(5, seqMsg.streamId.envId)
         assertEquals(4259845, seqMsg.streamId.sessNum)
@@ -280,8 +284,10 @@ class TestHandler {
         assertEquals(40287, seqMsg.streamId.userId)
         assertEquals(4, seqMsg.streamId.subId)
         assertEquals(BigDecimal.valueOf(23), seqMsg.seq)
-        assertEquals(0, seqMsg.reserved1)
+        //assertEquals(reserved.array(), seqMsg.reserved1.array())
         assertEquals("2021-12-27T13:39:14.524104", seqMsg.timestamp.toString())
+        assertEquals(22, seqMsg.payload.type)
+        assertEquals(4, seqMsg.payload.length)
     }
 
     @Test
@@ -342,25 +348,32 @@ class TestHandler {
             .writeByte(15)
             .writeShort(40287)
             .writeByte(4)
+            .writerIndex(12)
             .writeByte(BigDecimal.valueOf(23).toInt())
             .writerIndex(20)
-            .writeMedium(0)
-            .writerIndex(24)
             .writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
+            .writerIndex(28)
+            .writeShortLE(22)
+            .writeShortLE(0)
 
         buffer.readerIndex(4)
-        val seqMsg = SeqMsg(buffer)
-        val seqMsgToSend = SeqMsgToSend(1, seqMsg.streamId).seqMsg()
 
-        assertEquals(32, seqMsgToSend.writerIndex())
+        val seqMsg = SeqMsg(buffer, 32)
+        val message = Unpooled.buffer()
+        val metadata = HashMap<String, String>()
+        metadata[TYPE_FIELD_NAME] = 22.toString()
+        metadata[LENGTH_FIELD_NAME] = 0.toString()
+        SeqMsgToSend(message, 1, seqMsg.streamId, metadata).seqMsg()
 
-        assertEquals(2309, seqMsgToSend.readUnsignedShortLE())
-        assertEquals(32, seqMsgToSend.readUnsignedShortLE())
-        assertEquals(5, seqMsgToSend.readUnsignedByte())
-        assertEquals(4259845, seqMsgToSend.readMedium())
-        assertEquals(15, seqMsgToSend.readByte())
-        assertEquals(40287, seqMsgToSend.readUnsignedShort())
-        assertEquals(4, seqMsgToSend.readByte().toInt())
+        assertEquals(32, message.writerIndex())
+
+        assertEquals(2309, message.readUnsignedShortLE())
+        assertEquals(32, message.readUnsignedShortLE())
+        assertEquals(5, message.readUnsignedByte())
+        assertEquals(4259845, message.readMedium())
+        assertEquals(15, message.readByte())
+        assertEquals(40287, message.readUnsignedShort())
+        assertEquals(4, message.readByte().toInt())
     }
 
     @Test
@@ -426,15 +439,21 @@ class TestHandler {
             .writeShort(40287)
             .writeByte(4)
 
-        val pillarHandler = PillarHandler(context)
+        val streamId: ByteBuf = Unpooled.buffer().writeByte(5)
+            .writeMedium(4259845)
+            .writeByte(15)
+            .writeShort(40287)
+            .writeByte(4)
+            .writeByte(BigDecimal.valueOf(23).toInt())
+
         val metadata = mutableMapOf<String, String>()
+
         metadata[TYPE_FIELD_NAME] = 500.toString()
-        metadata[LENGTH_FIELD_NAME] = 21.toString()
+        metadata[LENGTH_FIELD_NAME] = 12.toString()
 
-        val onOutgoing = pillarHandler.onOutgoing(buffer, metadata)
+        SeqMsgToSend(buffer, 1, StreamId(streamId), metadata)
 
-        assertEquals(500.toString(), onOutgoing[TYPE_FIELD_NAME])
-        assertEquals(21.toString(), onOutgoing[LENGTH_FIELD_NAME])
+        assertNotNull(buffer)
     }
 
 

@@ -16,13 +16,9 @@
 
 package com.exactpro.th2.conn.dirty.pillar.handler
 
-import com.exactpro.th2.conn.dirty.pillar.handler.util.Access
-import com.exactpro.th2.conn.dirty.pillar.handler.util.MODE_LOSSY
-import com.exactpro.th2.conn.dirty.pillar.handler.util.MessageType
-import com.exactpro.th2.conn.dirty.pillar.handler.util.StreamType
+import com.exactpro.th2.conn.dirty.pillar.handler.util.*
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
-import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
@@ -126,38 +122,47 @@ class Open(private val streamId: StreamId,
     }
 }
 
-class SeqMsgToSend(private val num: Int,
-                   private val streamId: StreamId) {
+class SeqMsgToSend(private val message: ByteBuf,
+                   private val num: Int,
+                   private val streamId: StreamId,
+                   private val metadata: Map<String, String>) {
     private val type: Int = MessageType.SEQMSG.type
     private val length: Int = MessageType.SEQMSG.length
 
-    fun seqMsg(): ByteBuf {
-        val seqMsgMessage: ByteBuf = Unpooled.buffer(length)
+    fun seqMsg() {
+        val offset = message.readerIndex()
+        val size = message.readableBytes()
 
-        seqMsgMessage.markWriterIndex()
-        seqMsgMessage.writeShortLE(type)
-        seqMsgMessage.writeShortLE(length)
+        val buffer: ByteBuf = message.copy(0, size)
+        message.writerIndex(offset)
+        message.writeShortLE(type)
+        message.writeShortLE(length + size)
 
-        seqMsgMessage.writerIndex(4)
-        seqMsgMessage.writeByte(streamId.envId.toInt())
-        seqMsgMessage.writeMedium(streamId.sessNum)
-        seqMsgMessage.writeByte(streamId.streamType.toInt())
-        seqMsgMessage.writeShort(streamId.userId)
-        seqMsgMessage.writeByte(streamId.subId)
+        message.writeByte(streamId.envId.toInt())
+        message.writeMedium(streamId.sessNum)
+        message.writeByte(streamId.streamType.toInt())
+        message.writeShort(streamId.userId)
+        message.writeByte(streamId.subId)
+        message.writeByte(num)
+        message.writerIndex(20)
+        message.writeBytes(buffer)
 
-        seqMsgMessage.writerIndex(12)
-        seqMsgMessage.writeByte(num)
-        seqMsgMessage.writerIndex(20)
-        seqMsgMessage.writeInt(0)//TODO
-
-        seqMsgMessage.writerIndex(24)
+        message.writerIndex(20 + size)
         val time = LocalDateTime.now()
         val seconds = time.toEpochSecond(ZoneOffset.UTC).toULong()
         val nanoseconds = time.nano.toULong()
-        seqMsgMessage.writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
+        message.writeLongLE((seconds * 1_000_000_000UL + nanoseconds).toLong())
 
-        require(seqMsgMessage.writerIndex() == length) { "Message size exceeded." }
-        return seqMsgMessage
+        println(message.writerIndex())
+        if (metadata[TYPE_FIELD_NAME] != null)
+            message.writeShortLE(metadata[TYPE_FIELD_NAME]!!.toInt())
+        else message.writeShortLE(0)
+
+        if (metadata[LENGTH_FIELD_NAME] != null)
+            message.writeShortLE(metadata[LENGTH_FIELD_NAME]!!.toInt())
+        else message.writeShortLE(size)
+
+        require(message.writerIndex() == size + length) { "Message size exceeded." }
     }
 }
 
