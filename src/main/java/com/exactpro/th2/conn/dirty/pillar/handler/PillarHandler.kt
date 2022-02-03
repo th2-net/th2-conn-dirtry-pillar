@@ -72,6 +72,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
     override fun onReceive(buffer: ByteBuf): ByteBuf? {
         val bufferLength = buffer.readableBytes()
+        val offset = buffer.readerIndex()
         if (bufferLength == 0) {
             LOGGER.warn { "Cannot parse empty buffer." }
             return null
@@ -99,11 +100,12 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
         if(bufferLength > messageLength) {
             LOGGER.info { "Buffer length is longer than the declared one: $bufferLength -> $messageLength." }
-            return buffer.readSlice(messageLength)
+            buffer.readerIndex(buffer.writerIndex())
+            return buffer.retainedSlice(offset, messageLength)
         }
 
         buffer.readerIndex(buffer.writerIndex())
-        return buffer.retainedSlice(buffer.readerIndex() - messageLength, messageLength)
+        return buffer.retainedSlice(offset, messageLength)
     }
 
     override fun onIncoming(message: ByteBuf): Map<String, String> {
@@ -175,33 +177,33 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
         LOGGER.info { "Type message - StreamAvail: $streamAvail" }
         message.readerIndex(4)
         val streamIdAvail = StreamIdEncode(StreamId(message))
-
+        val nextSeq = streamAvail.nextSeq.toInt()
 
         if (streamAvail.streamId.streamType == StreamType.REF.value || streamAvail.streamId.streamType == StreamType.GT.value) {
-            if (connectRead.compareAndSet(OpenType.CLOSE, OpenType.SENT)) {
+            if (connectRead.compareAndSet(OpenType.CLOSE, OpenType.SENT) || connectRead.get() == OpenType.SENT) {
                 streamIdRead = streamIdAvail
+                serverSeqNum.getAndSet(nextSeq)
                 channel.send(
                     Open(
                         streamIdRead.streamId,
-                        streamAvail.nextSeq.toInt(),
-                        streamAvail.nextSeq.toInt() + 12
+                        nextSeq,
+                        nextSeq + seqNum
                     ).open(),
                     messageMetadata(MessageType.OPEN), IChannel.SendMode.MANGLE
                 )
-                LOGGER.info { "Message has been sent to server - Open for read." }
             }
         } else if (streamAvail.streamId.streamType == StreamType.TG.value) {
-            if (connectWrite.compareAndSet(OpenType.CLOSE, OpenType.SENT)) {
+            if (connectWrite.compareAndSet(OpenType.CLOSE, OpenType.SENT) || connectWrite.get() == OpenType.SENT) {
                 streamIdWrite = streamIdAvail
+                clientSeqNum.getAndSet(nextSeq)
                 channel.send(
                     Open(
                         streamIdWrite.streamId,
-                        streamAvail.nextSeq.toInt(),
-                        streamAvail.nextSeq.toInt() + seqNum
+                        nextSeq,
+                        nextSeq + seqNum
                     ).open(),
                     messageMetadata(MessageType.OPEN), IChannel.SendMode.MANGLE
                 )
-                LOGGER.info { "Message has been sent to server - Open for write." }
             }
         }
 
@@ -232,7 +234,6 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
         return messageMetadata(MessageType.OPEN_RESPONSE)
     }
-
 
     private fun checkSeqMsg(message: ByteBuf, header: MsgHeader): Map<String, String> {
         val seqMsg = SeqMsg(message, header.length)
