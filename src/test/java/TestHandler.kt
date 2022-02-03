@@ -216,38 +216,6 @@ class TestHandler {
     }
 
     @Test
-    fun `sending CloseResponse`() {
-        val buffer: ByteBuf = Unpooled.buffer()
-        buffer.writeShortLE(520)
-            .writeShortLE(13)
-            .writeByte(5)
-            .writeMedium(4259845)
-            .writeByte(15)
-            .writeShort(40287)
-            .writeByte(4)
-            .writeByte(0)
-
-        val pillarHandler = PillarHandler(context)
-        pillarHandler.channel = channel
-        val message = pillarHandler.onReceive(buffer)
-        assertEquals(13, buffer.readerIndex())
-
-        val metadata = pillarHandler.onIncoming(message!!)
-        message.readerIndex(4)
-        val closeResponseMsg = CloseResponse(message)
-
-        assertEquals(520.toString(), metadata[TYPE_FIELD_NAME])
-        assertEquals(13.toString(), metadata[LENGTH_FIELD_NAME])
-
-        assertEquals(5, closeResponseMsg.streamId.envId)
-        assertEquals(4259845, closeResponseMsg.streamId.sessNum)
-        assertEquals(15, closeResponseMsg.streamId.streamType)
-        assertEquals(40287, closeResponseMsg.streamId.userId)
-        assertEquals(4, closeResponseMsg.streamId.subId)
-        assertEquals(0, closeResponseMsg.status)
-    }
-
-    @Test
     fun `sending SeqMsg`() {
         val time = LocalDateTime.parse("2021-12-27T13:39:14.524104")
         val seconds = time.toEpochSecond(ZoneOffset.UTC).toULong()
