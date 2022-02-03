@@ -36,7 +36,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     private val executor = Executors.newScheduledThreadPool(1)
     private var clientFuture: Future<*>? = CompletableFuture.completedFuture(null)
     private var serverFuture: Future<*>? = CompletableFuture.completedFuture(null)
-    private lateinit var streamId: StreamIdEncode
+    private lateinit var streamIdRead: StreamIdEncode
+    private lateinit var streamIdWrite: StreamIdEncode
     private var settings: PillarHandlerSettings
     lateinit var channel: IChannel
     private var connectRead = AtomicReference(OpenType.CLOSE)
@@ -165,7 +166,6 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     }
 
     private fun checkStreamAvail(message: ByteBuf): Map<String, String> {
-        executor.awaitTermination(0, TimeUnit.MILLISECONDS)
         serverFuture?.cancel(false)
         serverFuture =
             executor.schedule(this::receivedHeartBeats, settings.streamAvailInterval, TimeUnit.MILLISECONDS)
@@ -174,14 +174,15 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
         LOGGER.info { "Type message - StreamAvail: $streamAvail" }
         message.readerIndex(4)
-        streamId = StreamIdEncode(StreamId(message))
+        val streamIdAvail = StreamIdEncode(StreamId(message))
 
 
         if (streamAvail.streamId.streamType == StreamType.REF.value || streamAvail.streamId.streamType == StreamType.GT.value) {
             if (connectRead.compareAndSet(OpenType.CLOSE, OpenType.SENT)) {
+                streamIdRead = streamIdAvail
                 channel.send(
                     Open(
-                        streamId.streamId,
+                        streamIdRead.streamId,
                         streamAvail.nextSeq.toInt(),
                         streamAvail.nextSeq.toInt() + 12
                     ).open(),
@@ -191,9 +192,10 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
             }
         } else if (streamAvail.streamId.streamType == StreamType.TG.value) {
             if (connectWrite.compareAndSet(OpenType.CLOSE, OpenType.SENT)) {
+                streamIdWrite = streamIdAvail
                 channel.send(
                     Open(
-                        streamId.streamId,
+                        streamIdWrite.streamId,
                         streamAvail.nextSeq.toInt(),
                         streamAvail.nextSeq.toInt() + seqNum
                     ).open(),
@@ -218,8 +220,8 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
                 connectRead.compareAndSet(OpenType.SENT, OpenType.OPEN)
                 connectWrite.compareAndSet(OpenType.SENT, OpenType.OPEN)
 
-                if (connectRead.get() == OpenType.OPEN || connectWrite.get() == OpenType.OPEN){
-                    if (state.compareAndSet(State.LOGGED_IN, State.OPEN_IN)|| state.get() == State.OPEN_IN)
+                if (connectRead.get() == OpenType.OPEN && connectWrite.get() == OpenType.OPEN){
+                    if (state.compareAndSet(State.LOGGED_IN, State.OPEN_IN))
                         LOGGER.info { "Setting state -> ${state.get()}" }
                 }
             }
@@ -250,11 +252,24 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
         when (Status.getStatus(closeResponse.status)) {
             Status.OK -> {
                 LOGGER.info("Close successful.")
-                if (state.compareAndSet(State.OPEN_OUT, State.LOGGED_OUT)) {
-                    LOGGER.info { "Setting a new state -> ${state.get()}." }
+                if (closeResponse.streamId == streamIdRead.streamId)
                     connectRead.getAndSet(OpenType.CLOSE)
+                if (closeResponse.streamId == streamIdWrite.streamId)
                     connectWrite.getAndSet(OpenType.CLOSE)
-                } else LOGGER.info { "Failed to set a new state ${State.LOGGED_OUT}." }
+
+                if (connectRead.get()==OpenType.CLOSE && connectWrite.get()==OpenType.CLOSE) {
+                    if (state.compareAndSet(State.OPEN_OUT, State.LOGGED_OUT)) {
+                        LOGGER.info { "Setting a new state -> ${state.get()}." }
+                        executor.shutdown()
+                        try {
+                            if (!executor.awaitTermination(3000, TimeUnit.MILLISECONDS)) {
+                                executor.shutdownNow()
+                            }
+                        } catch (e: InterruptedException) {
+                            executor.shutdownNow()
+                        }
+                    } else LOGGER.info { "Failed to set a new state ${State.LOGGED_OUT}." }
+                }
             }
             Status.STREAM_NOT_OPEN -> LOGGER.warn { "Stream not close." }
             else -> error("This is not an CloseResponse status.")
@@ -265,7 +280,7 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
 
     override fun onOutgoing(message: ByteBuf, metadata: Map<String, String>): Map<String, String> {
         clientSeqNum.incrementAndGet()
-        SeqMsgToSend(message, clientSeqNum.get(), streamId.streamId, metadata)
+        SeqMsgToSend(message, clientSeqNum.get(), streamIdWrite.streamId, metadata).seqMsg()
         if(clientSeqNum.get() == seqNum){
             connectWrite.compareAndSet(OpenType.OPEN, OpenType.CLOSE)
         }
@@ -284,15 +299,22 @@ class PillarHandler(private val context: IContext<IProtocolHandlerSettings>): IP
     override fun close() {
         if (state.compareAndSet(State.OPEN_IN, State.OPEN_OUT)){
             LOGGER.info { "Setting a new state -> ${state.get()}." }
-            channel.send(
-                Close(streamId.streamIdBuf).close(),
-                messageMetadata(MessageType.CLOSE),
-                IChannel.SendMode.MANGLE
-            )
+            if (connectRead.get() == OpenType.OPEN) {
+                channel.send(
+                    Close(streamIdRead.streamIdBuf).close(),
+                    messageMetadata(MessageType.CLOSE),
+                    IChannel.SendMode.MANGLE
+                )
+            }
+            if (connectWrite.get() == OpenType.OPEN) {
+                channel.send(
+                    Close(streamIdWrite.streamIdBuf).close(),
+                    messageMetadata(MessageType.CLOSE),
+                    IChannel.SendMode.MANGLE
+                )
+            }
             LOGGER.info { "Message has been sent to server - Close." }
         } else LOGGER.info { "Failed to set a new state ${State.OPEN_OUT}." }
-        executor.shutdown()
-        if (!executor.awaitTermination(3000, TimeUnit.MILLISECONDS)) executor.shutdownNow()
     }
 
     private fun startSendHeartBeats() {
